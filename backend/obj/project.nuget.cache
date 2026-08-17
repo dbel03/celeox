@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "gXbBVlZ0blo=",
+  "success": true,
+  "projectFilePath": "C:\\Development\\_LOCAL\\WEB\\celeox-proyect\\backend\\CeleoxApi.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\david.bel\\.nuget\\packages\\microsoft.aspnetcore.openapi\\10.0.11\\microsoft.aspnetcore.openapi.10.0.11.nupkg.sha512",
+    "C:\\Users\\david.bel\\.nuget\\packages\\microsoft.openapi\\2.7.5\\microsoft.openapi.2.7.5.nupkg.sha512",
+    "C:\\Users\\david.bel\\.nuget\\packages\\osmsharp\\6.2.0\\osmsharp.6.2.0.nupkg.sha512",
+    "C:\\Users\\david.bel\\.nuget\\packages\\protobuf-net\\2.3.7\\protobuf-net.2.3.7.nupkg.sha512"
+  ],
+  "logs": []
+}
