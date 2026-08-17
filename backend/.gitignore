@@ -1,0 +1,63 @@
+# Carpetas de compilación
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# VS Code (específico de .NET; el resto ya lo cubre el .gitignore del frontend)
+.vscode/*.db
+
+# Resultados de build y publicación
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Resultados de test
+[Tt]est[Rr]esult*/
+*.trx
+
+# NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+
+# Ficheros de configuración local con secretos
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+*.pfx
+
+# Ficheros de base de datos locales (si usas SQLite en desarrollo)
+*.db
+*.db-shm
+*.db-wal
+
+# Otros
+*.DotSettings.user
+*.psess
+*.vsp
+*.vspx
+*.sap

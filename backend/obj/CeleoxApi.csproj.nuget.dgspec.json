@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Development\\_LOCAL\\WEB\\celeox-proyect\\backend\\CeleoxApi.csproj": {}
+    "c:\\Development\\_LOCAL\\WEB\\celeox-proyect\\backend\\CeleoxApi.csproj": {}
   },
   "projects": {
-    "C:\\Development\\_LOCAL\\WEB\\celeox-proyect\\backend\\CeleoxApi.csproj": {
+    "c:\\Development\\_LOCAL\\WEB\\celeox-proyect\\backend\\CeleoxApi.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Development\\_LOCAL\\WEB\\celeox-proyect\\backend\\CeleoxApi.csproj",
+        "projectUniqueName": "c:\\Development\\_LOCAL\\WEB\\celeox-proyect\\backend\\CeleoxApi.csproj",
         "projectName": "CeleoxApi",
-        "projectPath": "C:\\Development\\_LOCAL\\WEB\\celeox-proyect\\backend\\CeleoxApi.csproj",
+        "projectPath": "c:\\Development\\_LOCAL\\WEB\\celeox-proyect\\backend\\CeleoxApi.csproj",
         "packagesPath": "C:\\Users\\david.bel\\.nuget\\packages\\",
-        "outputPath": "C:\\Development\\_LOCAL\\WEB\\celeox-proyect\\backend\\obj\\",
+        "outputPath": "c:\\Development\\_LOCAL\\WEB\\celeox-proyect\\backend\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

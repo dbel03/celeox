@@ -1,0 +1,6 @@
+@CeleoxApi_HostAddress = http://localhost:5145
+
+GET {{CeleoxApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

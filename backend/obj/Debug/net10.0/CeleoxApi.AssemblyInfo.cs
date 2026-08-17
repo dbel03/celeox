@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CeleoxApi")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3534eaf1ed9d0c43c9dcc1c756eed2a96fccd795")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9ff94e9b78a2c5043c3e0d498998b2ba5d6455fa")]
 [assembly: System.Reflection.AssemblyProductAttribute("CeleoxApi")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CeleoxApi")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
