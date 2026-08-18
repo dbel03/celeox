@@ -694,12 +694,11 @@ function MapView() {
 
                                 <Popup>
 
-                                    <div className="min-w-[220px]">
-
+                                    <div className="min-w-[140px] max-w-[180px]">
 
                                         {/* Nombre */}
 
-                                        <h3 className="mb-2 text-lg font-bold">
+                                        <h3 className="mb-1 text-sm font-bold leading-tight">
 
                                             💧{' '}
 
@@ -711,38 +710,12 @@ function MapView() {
 
                                         {/* Información básica */}
 
-                                        <div className="space-y-1 text-sm">
+                                        <div className="space-y-0.5 text-xs">
 
                                             <p>
-
-                                                <strong>
-                                                    Tipo:
-                                                </strong>{' '}
-
-                                                Manantial
-
-                                            </p>
-
-
-                                            <p>
-
-                                                <strong>
-                                                    Latitud:
-                                                </strong>{' '}
-
-                                                {spring.latitude}
-
-                                            </p>
-
-
-                                            <p>
-
-                                                <strong>
-                                                    Longitud:
-                                                </strong>{' '}
-
-                                                {spring.longitude}
-
+                                                {spring.latitude.toFixed(5)}
+                                                {', '}
+                                                {spring.longitude.toFixed(5)}
                                             </p>
 
                                         </div>
@@ -752,25 +725,16 @@ function MapView() {
 
                                         {spring.tags && (
 
-                                            <div className="mt-3 border-t pt-2">
+                                            <div className="mt-1.5 border-t pt-1">
 
-                                                <p className="mb-1 font-semibold">
-
-                                                    Información OSM
-
-                                                </p>
-
-
-                                                <div className="space-y-1 text-xs">
+                                                <div className="space-y-0.5 text-[10px] text-gray-600">
 
                                                     {Object.entries(
                                                         spring.tags
                                                     ).map(
                                                         ([key, value]) => (
 
-                                                            <div
-                                                                key={key}
-                                                            >
+                                                            <div key={key}>
 
                                                                 <strong>
                                                                     {key}:
