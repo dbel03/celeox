@@ -29,6 +29,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// --- Servir el frontend (wwwroot) ---
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.MapControllers();
 
 var summaries = new[]
@@ -51,6 +55,9 @@ app.MapGet("/weatherforecast", () =>
     return forecast;
 })
 .WithName("GetWeatherForecast");
+
+// Fallback a index.html para rutas de React Router
+app.MapFallbackToFile("index.html");
 
 app.Run();
 
