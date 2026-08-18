@@ -1,4 +1,6 @@
 using CeleoxApi.Services;
+using CeleoxApi.Configuration;
+using CeleoxApi.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,6 +11,13 @@ builder.Services.AddSingleton<OsmService>();
 
 // OpenAPI
 builder.Services.AddOpenApi();
+
+// MongoDB
+builder.Services.Configure<MongoDbSettings>(
+    builder.Configuration.GetSection("MongoDB")
+);
+
+builder.Services.AddSingleton<MongoDbContext>();
 
 var app = builder.Build();
 

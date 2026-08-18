@@ -1,5 +1,6 @@
 using OsmSharp;
 using OsmSharp.Streams;
+using CeleoxApi.Models;
 
 namespace CeleoxApi.Services;
 
@@ -134,6 +135,103 @@ public class OsmService
             viewpoints,
             peaks
         );
+    }
+
+    public MountainFeature? GetFirstSpring()
+    {
+        if (!File.Exists(_osmFilePath))
+        {
+            throw new FileNotFoundException(
+                "No se ha encontrado el fichero OSM.",
+                _osmFilePath
+            );
+        }
+
+        using var fileStream = File.OpenRead(_osmFilePath);
+
+        var source = new PBFOsmStreamSource(fileStream);
+
+        foreach (var osmGeo in source)
+        {
+            if (osmGeo.Tags == null)
+                continue;
+
+            if (!osmGeo.Tags.TryGetValue("natural", out var natural))
+                continue;
+
+            if (natural != "spring")
+                continue;
+
+            if (osmGeo is not Node node)
+                continue;
+
+            return new MountainFeature
+            {
+                Id = node.Id?.ToString() ?? string.Empty,
+                Type = "spring",
+                Name = node.Tags.TryGetValue("name", out var name)
+                    ? name
+                    : null,
+                Latitude = node.Latitude ?? 0,
+                Longitude = node.Longitude ?? 0,
+                Tags = node.Tags
+                    .ToDictionary(
+                        x => x.Key,
+                        x => x.Value
+                    )
+            };
+        }
+
+        return null;
+    }
+
+    public List<MountainFeature> GetSprings()
+    {
+        if (!File.Exists(_osmFilePath))
+        {
+            throw new FileNotFoundException(
+                "No se ha encontrado el fichero OSM.",
+                _osmFilePath
+            );
+        }
+
+        var springs = new List<MountainFeature>();
+
+        using var fileStream = File.OpenRead(_osmFilePath);
+
+        var source = new PBFOsmStreamSource(fileStream);
+
+        foreach (var osmGeo in source)
+        {
+            if (osmGeo.Tags == null)
+                continue;
+
+            if (!osmGeo.Tags.TryGetValue("natural", out var natural))
+                continue;
+
+            if (natural != "spring")
+                continue;
+
+            if (osmGeo is not Node node)
+                continue;
+
+            springs.Add(new MountainFeature
+            {
+                Id = node.Id?.ToString() ?? string.Empty,
+                Type = "spring",
+                Name = node.Tags.TryGetValue("name", out var name)
+                    ? name
+                    : null,
+                Latitude = node.Latitude ?? 0,
+                Longitude = node.Longitude ?? 0,
+                Tags = node.Tags.ToDictionary(
+                    x => x.Key,
+                    x => x.Value
+                )
+            });
+        }
+
+        return springs;
     }
 }
 
