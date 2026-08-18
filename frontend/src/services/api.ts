@@ -42,3 +42,20 @@ export async function getSprings(
 
     return response.json()
 }
+
+export async function searchSprings(
+    name: string
+): Promise<MountainFeature[]> {
+
+    const response = await fetch(
+        `${API_URL}/osm/springs/search?name=${encodeURIComponent(name)}`
+    )
+
+    if (!response.ok) {
+        throw new Error(
+            'Error buscando fuentes'
+        )
+    }
+
+    return response.json()
+}

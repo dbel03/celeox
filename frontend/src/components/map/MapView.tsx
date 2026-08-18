@@ -1,4 +1,8 @@
-import { springIcon,userLocationIcon } from './icons'
+import {
+    springIcon,
+    userLocationIcon,
+} from './icons'
+
 import MarkerClusterGroup from 'react-leaflet-cluster'
 
 import {
@@ -12,6 +16,7 @@ import {
     Marker,
     Popup,
     TileLayer,
+    useMap,
     useMapEvents,
 } from 'react-leaflet'
 
@@ -19,9 +24,12 @@ import 'leaflet/dist/leaflet.css'
 
 import {
     getSprings,
+    searchSprings,
 } from '../../services/api'
 
-import type { MountainFeature } from '../../services/api'
+import type {
+    MountainFeature,
+} from '../../services/api'
 
 
 interface MapBounds {
@@ -87,6 +95,44 @@ function MapEvents({
 }
 
 
+/*
+ * Controlador para mover el mapa
+ * cuando seleccionamos una fuente
+ */
+function SearchController({
+    spring,
+}: {
+    spring: MountainFeature | null
+}) {
+
+    const map = useMap()
+
+
+    useEffect(() => {
+
+        if (!spring) {
+            return
+        }
+
+
+        map.flyTo(
+            [
+                spring.latitude,
+                spring.longitude,
+            ],
+            16,
+            {
+                duration: 1.5,
+            }
+        )
+
+    }, [spring, map])
+
+
+    return null
+}
+
+
 function MapView() {
 
     /*
@@ -99,9 +145,18 @@ function MapView() {
 
 
     /*
-     * Fuentes visibles
+     * Fuentes visibles en el mapa
      */
     const [springs, setSprings] =
+        useState<MountainFeature[]>([])
+
+
+    /*
+     * Resultados del buscador
+     *
+     * Estos vienen directamente de MongoDB.
+     */
+    const [searchResults, setSearchResults] =
         useState<MountainFeature[]>([])
 
 
@@ -117,6 +172,27 @@ function MapView() {
      */
     const [zoom, setZoom] =
         useState<number>(13)
+
+
+    /*
+     * Texto del buscador
+     */
+    const [search, setSearch] =
+        useState('')
+
+
+    /*
+     * Indica si estamos buscando
+     */
+    const [searching, setSearching] =
+        useState(false)
+
+
+    /*
+     * Fuente seleccionada
+     */
+    const [selectedSpring, setSelectedSpring] =
+        useState<MountainFeature | null>(null)
 
 
     /*
@@ -174,15 +250,99 @@ function MapView() {
 
 
     /*
+     * Buscar fuentes en MongoDB
+     *
+     * Esperamos 300 ms después de que el usuario
+     * deje de escribir antes de consultar la API.
+     */
+    useEffect(() => {
+
+        /*
+         * Si no hay texto,
+         * limpiar resultados.
+         */
+        if (search.trim().length === 0) {
+
+            setSearchResults([])
+
+            setSearching(false)
+
+            return
+        }
+
+
+        /*
+         * No buscar con una sola letra.
+         */
+        if (search.trim().length < 2) {
+
+            setSearchResults([])
+
+            return
+        }
+
+
+        setSearching(true)
+
+
+        const timeoutId =
+            window.setTimeout(() => {
+
+                searchSprings(search.trim())
+                    .then((data) => {
+
+                        console.log(
+                            'Resultados de búsqueda:',
+                            data.length
+                        )
+
+                        setSearchResults(data)
+
+                    })
+                    .catch((error) => {
+
+                        console.error(
+                            'Error buscando fuentes:',
+                            error
+                        )
+
+                        setSearchResults([])
+
+                    })
+                    .finally(() => {
+
+                        setSearching(false)
+
+                    })
+
+            }, 300)
+
+
+        /*
+         * Cancelar la búsqueda anterior
+         * si el usuario sigue escribiendo.
+         */
+        return () => {
+
+            window.clearTimeout(
+                timeoutId
+            )
+
+        }
+
+    }, [search])
+
+
+    /*
      * Límites del mapa: Catalunya
      */
     const catalunyaBounds: [
         [number, number],
         [number, number]
     ] = [
-        [40.5, 0.15],
-        [42.9, 3.35],
-    ]
+            [40.5, 0.15],
+            [42.9, 3.35],
+        ]
 
 
     /*
@@ -322,6 +482,133 @@ function MapView() {
 
         <div className="relative h-full w-full">
 
+
+            {/* ================================
+                BUSCADOR
+            ================================= */}
+
+            <div className="absolute left-16 top-4 z-[1000] w-80">
+
+                <input
+                    type="text"
+                    value={search}
+                    onChange={(event) => {
+
+                        setSearch(
+                            event.target.value
+                        )
+
+                        setSelectedSpring(
+                            null
+                        )
+
+                    }}
+                    placeholder="Buscar fuente..."
+                    className="w-full rounded-lg border bg-white px-4 py-3 shadow-lg outline-none focus:ring-2 focus:ring-blue-500"
+                />
+
+
+                {/* ================================
+                    BUSCANDO
+                ================================= */}
+
+                {searching && (
+
+                    <div className="mt-1 rounded-lg bg-white p-3 text-sm text-gray-500 shadow-lg">
+
+                        Buscando fuentes...
+
+                    </div>
+
+                )}
+
+
+                {/* ================================
+                    RESULTADOS
+                ================================= */}
+
+                {!searching &&
+                    search.length >= 2 &&
+                    searchResults.length > 0 && (
+
+                        <div className="mt-1 max-h-80 overflow-y-auto rounded-lg bg-white shadow-lg">
+
+                            {searchResults.map(
+                                (spring) => (
+
+                                    <button
+                                        key={spring.id}
+                                        type="button"
+                                        onClick={() => {
+
+                                            setSelectedSpring(
+                                                spring
+                                            )
+
+                                            setSearch(
+                                                spring.name ??
+                                                ''
+                                            )
+
+                                            setSearchResults(
+                                                []
+                                            )
+
+                                        }}
+                                        className="w-full border-b p-3 text-left hover:bg-gray-100"
+                                    >
+
+                                        <div className="font-semibold">
+
+                                            💧{' '}
+
+                                            {spring.name ??
+                                                'Fuente sin nombre'}
+
+                                        </div>
+
+
+                                        <div className="text-xs text-gray-500">
+
+                                            {spring.latitude.toFixed(5)}
+                                            {', '}
+                                            {spring.longitude.toFixed(5)}
+
+                                        </div>
+
+                                    </button>
+
+                                )
+                            )}
+
+                        </div>
+
+                    )}
+
+
+                {/* ================================
+                    SIN RESULTADOS
+                ================================= */}
+
+                {!searching &&
+                    search.length >= 2 &&
+                    searchResults.length === 0 && (
+
+                        <div className="mt-1 rounded-lg bg-white p-4 text-sm text-gray-500 shadow-lg">
+
+                            No se han encontrado fuentes.
+
+                        </div>
+
+                    )}
+
+            </div>
+
+
+            {/* ================================
+                MAPA
+            ================================= */}
+
             <MapContainer
                 center={userLocation}
                 zoom={13}
@@ -331,6 +618,16 @@ function MapView() {
                 maxBoundsViscosity={1.0}
                 className="h-full w-full"
             >
+
+
+                {/* Controlador del buscador */}
+
+                <SearchController
+                    spring={selectedSpring}
+                />
+
+
+                {/* Mapa OpenStreetMap */}
 
                 <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -345,7 +642,9 @@ function MapView() {
                 />
 
 
-                {/* Ubicación actual del usuario */}
+                {/* ================================
+                    UBICACIÓN DEL USUARIO
+                ================================= */}
 
                 <Marker
                     position={userLocation}
@@ -361,11 +660,13 @@ function MapView() {
                         <br />
 
                         Latitud:{' '}
+
                         {userLocation[0]}
 
                         <br />
 
                         Longitud:{' '}
+
                         {userLocation[1]}
 
                     </Popup>
@@ -373,134 +674,140 @@ function MapView() {
                 </Marker>
 
 
-                {/* Fuentes */}
+                {/* ================================
+                    FUENTES
+                ================================= */}
 
                 <MarkerClusterGroup>
 
-                    {springs.map((spring) => (
+                    {springs.map(
+                        (spring) => (
 
-                        <Marker
-                            key={spring.id}
-                            position={[
-                                spring.latitude,
-                                spring.longitude,
-                            ]}
-                            icon={springIcon}
-                        >
+                            <Marker
+                                key={spring.id}
+                                position={[
+                                    spring.latitude,
+                                    spring.longitude,
+                                ]}
+                                icon={springIcon}
+                            >
 
-                            <Popup>
+                                <Popup>
 
-                                <div className="min-w-[220px]">
-
-
-                                    {/* Nombre */}
-
-                                    <h3 className="mb-2 text-lg font-bold">
-
-                                        💧{' '}
-
-                                        {spring.name ??
-                                            'Fuente sin nombre'}
-
-                                    </h3>
+                                    <div className="min-w-[220px]">
 
 
-                                    {/* Información básica */}
+                                        {/* Nombre */}
 
-                                    <div className="space-y-1 text-sm">
+                                        <h3 className="mb-2 text-lg font-bold">
 
-                                        <p>
+                                            💧{' '}
 
-                                            <strong>
-                                                Tipo:
-                                            </strong>{' '}
+                                            {spring.name ??
+                                                'Fuente sin nombre'}
 
-                                            Manantial
-
-                                        </p>
+                                        </h3>
 
 
-                                        <p>
+                                        {/* Información básica */}
 
-                                            <strong>
-                                                Latitud:
-                                            </strong>{' '}
+                                        <div className="space-y-1 text-sm">
 
-                                            {spring.latitude}
+                                            <p>
 
-                                        </p>
+                                                <strong>
+                                                    Tipo:
+                                                </strong>{' '}
 
-
-                                        <p>
-
-                                            <strong>
-                                                Longitud:
-                                            </strong>{' '}
-
-                                            {spring.longitude}
-
-                                        </p>
-
-                                    </div>
-
-
-                                    {/* Tags de OpenStreetMap */}
-
-                                    {spring.tags && (
-
-                                        <div className="mt-3 border-t pt-2">
-
-                                            <p className="mb-1 font-semibold">
-
-                                                Información OSM
+                                                Manantial
 
                                             </p>
 
 
-                                            <div className="space-y-1 text-xs">
+                                            <p>
 
-                                                {Object.entries(
-                                                    spring.tags
-                                                ).map(
-                                                    ([key, value]) => (
+                                                <strong>
+                                                    Latitud:
+                                                </strong>{' '}
 
-                                                        <div
-                                                            key={key}
-                                                        >
+                                                {spring.latitude}
 
-                                                            <strong>
-                                                                {key}:
-                                                            </strong>{' '}
+                                            </p>
 
-                                                            {value}
 
-                                                        </div>
+                                            <p>
 
-                                                    )
-                                                )}
+                                                <strong>
+                                                    Longitud:
+                                                </strong>{' '}
 
-                                            </div>
+                                                {spring.longitude}
+
+                                            </p>
 
                                         </div>
 
-                                    )}
 
-                                </div>
+                                        {/* Tags de OpenStreetMap */}
 
-                            </Popup>
+                                        {spring.tags && (
 
-                        </Marker>
+                                            <div className="mt-3 border-t pt-2">
 
-                    ))}
+                                                <p className="mb-1 font-semibold">
+
+                                                    Información OSM
+
+                                                </p>
+
+
+                                                <div className="space-y-1 text-xs">
+
+                                                    {Object.entries(
+                                                        spring.tags
+                                                    ).map(
+                                                        ([key, value]) => (
+
+                                                            <div
+                                                                key={key}
+                                                            >
+
+                                                                <strong>
+                                                                    {key}:
+                                                                </strong>{' '}
+
+                                                                {value}
+
+                                                            </div>
+
+                                                        )
+                                                    )}
+
+                                                </div>
+
+                                            </div>
+
+                                        )}
+
+                                    </div>
+
+                                </Popup>
+
+                            </Marker>
+
+                        )
+                    )}
 
                 </MarkerClusterGroup>
 
             </MapContainer>
 
 
-            {/* Contador + zoom */}
+            {/* ================================
+                INFORMACIÓN
+            ================================= */}
 
-            <div className="absolute left-4 top-4 z-[1000] rounded-lg bg-white p-4 shadow-lg">
+            <div className="absolute left-4 bottom-4 z-[1000] rounded-lg bg-white p-4 shadow-lg">
 
                 <div>
 
@@ -520,13 +827,14 @@ function MapView() {
 
                     📍{' '}
 
-                    {userLocation[0].toFixed(6)},{' '}
-
+                    {userLocation[0].toFixed(6)}
+                    {', '}
                     {userLocation[1].toFixed(6)}
 
                 </div>
 
             </div>
+
 
         </div>
     )

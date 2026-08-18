@@ -149,4 +149,33 @@ public class OsmController : ControllerBase
 
         return Ok(springs);
     }
+
+    [HttpGet("springs/search")]
+    public async Task<IActionResult> SearchSprings(
+    [FromQuery] string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return Ok(new List<MountainFeature>());
+
+        var filter =
+            Builders<MountainFeature>.Filter.Eq(
+                x => x.Type,
+                "spring"
+            )
+            &
+            Builders<MountainFeature>.Filter.Regex(
+                x => x.Name,
+                new MongoDB.Bson.BsonRegularExpression(
+                    name,
+                    "i"
+                )
+            );
+
+        var springs = await _mongoDbContext.MountainFeatures
+            .Find(filter)
+            .Limit(20)
+            .ToListAsync();
+
+        return Ok(springs);
+    }
 }
