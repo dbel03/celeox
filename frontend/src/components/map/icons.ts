@@ -11,3 +11,14 @@ export const springIcon = L.divIcon({
     iconAnchor: [16, 16],
     popupAnchor: [0, -16],
 })
+
+export const userLocationIcon = L.divIcon({
+    className: '',
+    html: `
+        <div class="user-location-marker">
+            <div class="user-location-dot"></div>
+        </div>
+    `,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+})
