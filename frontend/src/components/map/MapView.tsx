@@ -18,8 +18,7 @@ import {
     Marker,
     Popup,
     TileLayer,
-    useMap,
-    useMapEvents,
+    useMap
 } from 'react-leaflet'
 
 import 'leaflet/dist/leaflet.css'
