@@ -4,9 +4,14 @@ using CeleoxApi.Models;
 
 namespace CeleoxApi.Services;
 
-public class OsmService
+public class OsmService(IWebHostEnvironment environment)
 {
-    private readonly string _osmFilePath;
+    private readonly string _osmFilePath = Path.Combine(
+            environment.ContentRootPath,
+            "Data",
+            "osm",
+            "cataluna-260816.osm.pbf"
+        );
 
     /*
      * Mapeo de nuestro "type" lógico a los tags de OpenStreetMap
@@ -29,16 +34,6 @@ public class OsmService
         ["campsite"] = [("tourism", "camp_site")],
         ["hospital"] = [("amenity", "hospital")],
     };
-
-    public OsmService(IWebHostEnvironment environment)
-    {
-        _osmFilePath = Path.Combine(
-            environment.ContentRootPath,
-            "Data",
-            "osm",
-            "cataluna-260816.osm.pbf"
-        );
-    }
 
     private void EnsureFileExists()
     {
