@@ -1,5 +1,6 @@
 import {
     iconByType,
+    smallIconByType,
     emojiByType,
     userLocationIcon,
     selectedFeatureIcon,
@@ -104,19 +105,22 @@ const FeatureMarker = memo(
         selected: boolean
     }) {
 
-        /*
-         * Referencia al Marker de Leaflet.
-         *
-         * Nos permite abrir el Popup
-         * automáticamente cuando el elemento
-         * es seleccionado mediante el buscador.
-         */
         const markerRef =
             useRef<LeafletMarker | null>(null)
 
 
+        /*
+         * true mientras el popup de este marcador
+         * está abierto (clicado por el usuario).
+         */
+        const [
+            isOpen,
+            setIsOpen,
+        ] = useState(false)
+
+
         /* =================================================
-           ABRIR POPUP AL SELECCIONAR
+           ABRIR POPUP AL SELECCIONAR DESDE EL BUSCADOR
         ================================================= */
 
         useEffect(() => {
@@ -135,9 +139,22 @@ const FeatureMarker = memo(
         ])
 
 
-        /* =================================================
-           RENDER
-        ================================================= */
+        /*
+         * Icono según el estado:
+         * - seleccionado desde buscador -> rojo especial
+         * - popup abierto (clicado) -> icono grande del tipo
+         * - normal -> icono pequeño, pegado al mapa
+         */
+        const icon = selected
+            ? selectedFeatureIcon
+            : isOpen
+                ? iconByType[
+                    feature.type as keyof typeof iconByType
+                ] ?? userLocationIcon
+                : smallIconByType[
+                    feature.type as keyof typeof smallIconByType
+                ] ?? userLocationIcon
+
 
         return (
 
@@ -147,22 +164,16 @@ const FeatureMarker = memo(
                     feature.latitude,
                     feature.longitude,
                 ]}
-                icon={
-                    selected
-                        ? selectedFeatureIcon
-                        : iconByType[
-                            feature.type as keyof typeof iconByType
-                        ] ?? userLocationIcon
-                }
+                icon={icon}
+                eventHandlers={{
+                    popupopen: () => setIsOpen(true),
+                    popupclose: () => setIsOpen(false),
+                }}
             >
 
                 <Popup>
 
                     <div className="min-w-[140px] max-w-[180px]">
-
-                        {/* =================================
-                            NOMBRE
-                        ================================= */}
 
                         <h3 className="mb-1 text-sm font-bold leading-tight">
 
@@ -175,10 +186,6 @@ const FeatureMarker = memo(
 
                         </h3>
 
-
-                        {/* =================================
-                            COORDENADAS
-                        ================================= */}
 
                         <div className="space-y-0.5 text-xs">
 
@@ -195,10 +202,6 @@ const FeatureMarker = memo(
                         </div>
 
 
-                        {/* =================================
-                            TAGS
-                        ================================= */}
-
                         {feature.tags && (
 
                             <div className="mt-1.5 border-t pt-1">
@@ -210,9 +213,7 @@ const FeatureMarker = memo(
                                     ).map(
                                         ([key, value]) => (
 
-                                            <div
-                                                key={key}
-                                            >
+                                            <div key={key}>
 
                                                 <strong>
                                                     {key}:

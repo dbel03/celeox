@@ -150,3 +150,105 @@ export const selectedFeatureIcon = L.divIcon({
     iconAnchor: [19, 19],
     popupAnchor: [0, -19],
 })
+
+/*
+ * Versión pequeña de cada icono, para el estado "normal"
+ * (sin clicar). Discretos, pegados al mapa, sin apenas sombra.
+ */
+export const springIconSmall = L.divIcon({
+    className: '',
+    html: `
+        <div class="flex h-[18px] w-[18px] items-center justify-center rounded-full border border-white bg-blue-500 text-[10px] shadow-sm">
+            💧
+        </div>
+    `,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    popupAnchor: [0, -9],
+})
+
+export const peakIconSmall = L.divIcon({
+    className: '',
+    html: `
+        <div class="flex h-[18px] w-[18px] items-center justify-center rounded-full border border-white bg-stone-500 text-[10px] shadow-sm">
+            ⛰️
+        </div>
+    `,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    popupAnchor: [0, -9],
+})
+
+export const caveIconSmall = L.divIcon({
+    className: '',
+    html: `
+        <div class="flex h-[18px] w-[18px] items-center justify-center rounded-full border border-white bg-slate-700 text-[10px] shadow-sm">
+            🕳️
+        </div>
+    `,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    popupAnchor: [0, -9],
+})
+
+export const shelterIconSmall = L.divIcon({
+    className: '',
+    html: `
+        <div class="flex h-[18px] w-[18px] items-center justify-center rounded-full border border-white bg-amber-600 text-[10px] shadow-sm">
+            🏠
+        </div>
+    `,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    popupAnchor: [0, -9],
+})
+
+export const viewpointIconSmall = L.divIcon({
+    className: '',
+    html: `
+        <div class="flex h-[18px] w-[18px] items-center justify-center rounded-full border border-white bg-purple-500 text-[10px] shadow-sm">
+            👁️
+        </div>
+    `,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    popupAnchor: [0, -9],
+})
+
+export const campsiteIconSmall = L.divIcon({
+    className: '',
+    html: `
+        <div class="flex h-[18px] w-[18px] items-center justify-center rounded-full border border-white bg-emerald-600 text-[10px] shadow-sm">
+            ⛺
+        </div>
+    `,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    popupAnchor: [0, -9],
+})
+
+export const hospitalIconSmall = L.divIcon({
+    className: '',
+    html: `
+        <div class="flex h-[18px] w-[18px] items-center justify-center rounded-full border border-white bg-red-500 text-[10px] shadow-sm">
+            🏥
+        </div>
+    `,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    popupAnchor: [0, -9],
+})
+
+
+/*
+ * Icono pequeño según el tipo, para el estado normal (sin clicar).
+ */
+export const smallIconByType: Record<FeatureType, L.DivIcon> = {
+    spring: springIconSmall,
+    peak: peakIconSmall,
+    cave: caveIconSmall,
+    shelter: shelterIconSmall,
+    viewpoint: viewpointIconSmall,
+    campsite: campsiteIconSmall,
+    hospital: hospitalIconSmall,
+}
