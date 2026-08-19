@@ -75,7 +75,7 @@ function ExploreSection({
 
 
           {/* ============================
-              CENTROS EXCURSIONISTAS
+              GRUPOS EXCURSIONISTAS
           ============================ */}
 
           <div className="flex h-[500px] flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -83,7 +83,7 @@ function ExploreSection({
             <div className="mb-5">
 
               <h3 className="text-xl font-bold text-slate-900">
-                Centros excursionistas
+                Grupos de excursión
               </h3>
 
               <p className="mt-1 text-sm text-slate-500">
@@ -140,7 +140,7 @@ function ExploreSection({
               type="button"
               className="mt-5 w-full rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
-              Ver todos los centros
+              Ver todos Grupos
             </button>
 
           </div>

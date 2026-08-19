@@ -33,9 +33,10 @@ function Header({
             alt="Celeox logo"
             className="h-8 w-8"
           />
-          <span>
-            <span className="text-emerald-500">CELE</span>
-            <span className="text-white">OX</span>
+          <span className="rounded-full border border-white/40 bg-white/10 px-5 py-2.5 text-[20px] font-medium text-white backdrop-blur-md transition hover:bg-white/20">
+            <span className="text-white">CEL</span>
+            <span className="text-emerald-500">EO</span>
+            <span className="text-[#0F52BA]">X</span>
           </span>
         </button>
 
