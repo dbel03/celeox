@@ -1,9 +1,4 @@
 import {
-  useEffect,
-  useState,
-} from 'react'
-
-import {
   MapContainer,
   Marker,
   TileLayer,
@@ -12,6 +7,8 @@ import {
 import 'leaflet/dist/leaflet.css'
 
 import { userLocationIcon } from './icons'
+
+import useUserLocation from '../../hooks/useUserLocation'
 
 
 interface MapPreviewProps {
@@ -47,47 +44,11 @@ function MapPreview({
   /*
    * Ubicación del usuario.
    *
-   * Solo una lectura puntual (no watchPosition),
+   * Solo una lectura puntual (watch: false),
    * ya que es un preview y no necesita tiempo real.
    */
-  const [userLocation, setUserLocation] =
-    useState<[number, number] | null>(null)
-
-
-  useEffect(() => {
-
-    if (!navigator.geolocation) {
-      return
-    }
-
-    navigator.geolocation.getCurrentPosition(
-
-      (position) => {
-
-        setUserLocation([
-          position.coords.latitude,
-          position.coords.longitude,
-        ])
-
-      },
-
-      (error) => {
-
-        console.error(
-          'Error obteniendo ubicación:',
-          error
-        )
-
-      },
-
-      {
-        enableHighAccuracy: true,
-        timeout: 8000,
-        maximumAge: 60000,
-      }
-    )
-
-  }, [])
+  const { location: userLocation } =
+    useUserLocation({ watch: false })
 
 
   return (

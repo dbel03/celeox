@@ -31,6 +31,8 @@ import type {
     MountainFeature,
 } from '../../services/api'
 
+import useUserLocation from '../../hooks/useUserLocation'
+
 
 interface MapBounds {
     minLat: number
@@ -138,10 +140,12 @@ function MapView() {
     /*
      * Ubicación actual del usuario
      *
-     * Se actualiza mediante watchPosition()
+     * Seguimiento en tiempo real (watch: true)
      */
-    const [userLocation, setUserLocation] =
-        useState<[number, number] | null>(null)
+    const {
+        location: userLocation,
+        error,
+    } = useUserLocation({ watch: true })
 
 
     /*
@@ -158,13 +162,6 @@ function MapView() {
      */
     const [searchResults, setSearchResults] =
         useState<MountainFeature[]>([])
-
-
-    /*
-     * Error de geolocalización
-     */
-    const [error, setError] =
-        useState<string | null>(null)
 
 
     /*
@@ -343,105 +340,6 @@ function MapView() {
             [40.5, 0.15],
             [42.9, 3.35],
         ]
-
-
-    /*
-     * Obtener ubicación del usuario
-     * y actualizarla en tiempo real.
-     */
-    useEffect(() => {
-
-        /*
-         * Comprobar si el navegador soporta
-         * geolocalización.
-         */
-        if (!navigator.geolocation) {
-
-            setError(
-                'La geolocalización no está disponible en este navegador'
-            )
-
-            return
-        }
-
-
-        /*
-         * watchPosition mantiene el seguimiento
-         * de la ubicación.
-         */
-        const watchId =
-            navigator.geolocation.watchPosition(
-
-                (position) => {
-
-                    const {
-                        latitude,
-                        longitude,
-                    } = position.coords
-
-
-                    console.log(
-                        'Nueva ubicación:',
-                        latitude,
-                        longitude
-                    )
-
-
-                    setUserLocation([
-                        latitude,
-                        longitude,
-                    ])
-                },
-
-
-                (error) => {
-
-                    console.error(
-                        'Error obteniendo ubicación:',
-                        error
-                    )
-
-                    setError(
-                        'No se ha podido obtener tu ubicación'
-                    )
-                },
-
-
-                {
-                    /*
-                     * Intentar obtener la máxima precisión
-                     * disponible.
-                     */
-                    enableHighAccuracy: true,
-
-                    /*
-                     * Permitir una posición almacenada
-                     * de hasta 5 segundos.
-                     */
-                    maximumAge: 5000,
-
-                    /*
-                     * Tiempo máximo para obtener
-                     * una posición.
-                     */
-                    timeout: 10000,
-                }
-            )
-
-
-        /*
-         * Cuando el componente desaparezca,
-         * dejamos de escuchar el GPS.
-         */
-        return () => {
-
-            navigator.geolocation.clearWatch(
-                watchId
-            )
-
-        }
-
-    }, [])
 
 
     /*
