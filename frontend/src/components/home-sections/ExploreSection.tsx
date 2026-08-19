@@ -1,4 +1,4 @@
-import MapPreview from '../map/MapPreview'
+import MapPreview from '../shared/MapPreview'
 
 
 const hikingCenters = [

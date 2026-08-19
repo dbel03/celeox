@@ -6,7 +6,7 @@ import {
 
 import 'leaflet/dist/leaflet.css'
 
-import { userLocationIcon } from './icons'
+import { userLocationIcon } from '../map/icons'
 
 import useUserLocation from '../../hooks/useUserLocation'
 

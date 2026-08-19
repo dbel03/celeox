@@ -21,6 +21,14 @@ public class OsmController : ControllerBase
         _mongoDbContext = mongoDbContext;
     }
 
+    /*
+     * Tipos de feature soportados, delegado a OsmService
+     * (que es quien conoce el mapeo real tag -> type).
+     * Evita mantener dos listas duplicadas y desincronizadas.
+     */
+    private IEnumerable<string> SupportedTypes =>
+        _osmService.GetSupportedTypes();
+
     [HttpGet("info")]
     public IActionResult GetInfo()
     {
@@ -37,145 +45,104 @@ public class OsmController : ControllerBase
         return Ok(info);
     }
 
-    [HttpPost("test")]
-    public async Task<IActionResult> TestMongo()
+    /*
+     * Importa todos los tipos soportados desde el extracto OSM
+     * y los guarda (upsert) en Mongo.
+     */
+    [HttpPost("import")]
+    public async Task<IActionResult> ImportFeatures()
     {
-        var feature = new MountainFeature
+        var counts = new Dictionary<string, int>();
+
+        foreach (var type in SupportedTypes)
         {
-            Id = "test-1",
-            Type = "spring",
-            Name = "Fuente de prueba",
-            Latitude = 42.1234,
-            Longitude = 1.2345,
-            Tags = new Dictionary<string, string>
-            {
-                ["natural"] = "spring"
-            }
-        };
+            var features = _osmService.GetFeaturesByType(type);
 
-        await _mongoDbContext.MountainFeatures
-            .ReplaceOneAsync(
-                x => x.Id == feature.Id,
-                feature,
-                new ReplaceOptions
-                {
-                    IsUpsert = true
-                }
-            );
+            await _mongoDbContext.UpsertMountainFeaturesAsync(features);
 
-        return Ok(feature);
-    }
-
-    [HttpGet("mongo-test")]
-    public async Task<IActionResult> TestMongoRead()
-    {
-        var feature = await _mongoDbContext.MountainFeatures
-            .Find(x => x.Id == "test-1")
-            .FirstOrDefaultAsync();
-
-        return Ok(feature);
-    }
-
-    [HttpGet("spring-test")]
-    public async Task<IActionResult> TestSpring()
-    {
-        var spring = _osmService.GetFirstSpring();
-
-        if (spring == null)
-            return NotFound("No se ha encontrado ninguna fuente.");
-
-        await _mongoDbContext.MountainFeatures
-            .ReplaceOneAsync(
-                x => x.Id == spring.Id,
-                spring,
-                new ReplaceOptions
-                {
-                    IsUpsert = true
-                }
-            );
-
-        return Ok(spring);
-    }
-
-    [HttpPost("import-springs")]
-    public async Task<IActionResult> ImportSprings()
-    {
-        var springs = _osmService.GetSprings();
-
-        await _mongoDbContext.UpsertMountainFeaturesAsync(springs);
+            counts[type] = features.Count;
+        }
 
         return Ok(new
         {
-            count = springs.Count
+            total = counts.Values.Sum(),
+            byType = counts
         });
     }
 
-    [HttpGet("springs")]
-    public async Task<IActionResult> GetSprings(
-        double minLat,
-        double maxLat,
-        double minLon,
-        double maxLon)
+    /*
+     * Devuelve features de un tipo concreto dentro de un área.
+     * type es obligatorio: spring, peak, cave, hospital, etc.
+     */
+    [HttpGet("features")]
+    public async Task<IActionResult> GetFeatures(
+        [FromQuery] string type,
+        [FromQuery] double minLat,
+        [FromQuery] double maxLat,
+        [FromQuery] double minLon,
+        [FromQuery] double maxLon)
     {
-        var filter =
-            Builders<MountainFeature>.Filter.Eq(
-                x => x.Type,
-                "spring"
-            )
-            &
-            Builders<MountainFeature>.Filter.Gte(
-                x => x.Latitude,
-                minLat
-            )
-            &
-            Builders<MountainFeature>.Filter.Lte(
-                x => x.Latitude,
-                maxLat
-            )
-            &
-            Builders<MountainFeature>.Filter.Gte(
-                x => x.Longitude,
-                minLon
-            )
-            &
-            Builders<MountainFeature>.Filter.Lte(
-                x => x.Longitude,
-                maxLon
+        if (string.IsNullOrWhiteSpace(type) || !SupportedTypes.Contains(type))
+        {
+            return BadRequest(
+                $"Tipo no soportado. Tipos válidos: {string.Join(", ", SupportedTypes)}"
             );
+        }
 
-        var springs = await _mongoDbContext.MountainFeatures
+        var filter =
+            Builders<MountainFeature>.Filter.Eq(x => x.Type, type)
+            &
+            Builders<MountainFeature>.Filter.Gte(x => x.Latitude, minLat)
+            &
+            Builders<MountainFeature>.Filter.Lte(x => x.Latitude, maxLat)
+            &
+            Builders<MountainFeature>.Filter.Gte(x => x.Longitude, minLon)
+            &
+            Builders<MountainFeature>.Filter.Lte(x => x.Longitude, maxLon);
+
+        var features = await _mongoDbContext.MountainFeatures
             .Find(filter)
             .ToListAsync();
 
-        return Ok(springs);
+        return Ok(features);
     }
 
-    [HttpGet("springs/search")]
-    public async Task<IActionResult> SearchSprings(
-    [FromQuery] string name)
+    /*
+     * Busca features de un tipo concreto (o de todos, si se omite type)
+     * por nombre.
+     */
+    [HttpGet("features/search")]
+    public async Task<IActionResult> SearchFeatures(
+        [FromQuery] string name,
+        [FromQuery] string? type = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             return Ok(new List<MountainFeature>());
 
-        var filter =
-            Builders<MountainFeature>.Filter.Eq(
-                x => x.Type,
-                "spring"
-            )
-            &
-            Builders<MountainFeature>.Filter.Regex(
-                x => x.Name,
-                new MongoDB.Bson.BsonRegularExpression(
-                    name,
-                    "i"
-                )
-            );
+        var nameFilter = Builders<MountainFeature>.Filter.Regex(
+            x => x.Name,
+            new MongoDB.Bson.BsonRegularExpression(name, "i")
+        );
 
-        var springs = await _mongoDbContext.MountainFeatures
+        var filter = nameFilter;
+
+        if (!string.IsNullOrWhiteSpace(type))
+        {
+            if (!SupportedTypes.Contains(type))
+            {
+                return BadRequest(
+                    $"Tipo no soportado. Tipos válidos: {string.Join(", ", SupportedTypes)}"
+                );
+            }
+
+            filter &= Builders<MountainFeature>.Filter.Eq(x => x.Type, type);
+        }
+
+        var features = await _mongoDbContext.MountainFeatures
             .Find(filter)
             .Limit(20)
             .ToListAsync();
 
-        return Ok(springs);
+        return Ok(features);
     }
 }

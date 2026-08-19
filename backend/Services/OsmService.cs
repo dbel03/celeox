@@ -8,6 +8,28 @@ public class OsmService
 {
     private readonly string _osmFilePath;
 
+    /*
+     * Mapeo de nuestro "type" lógico a los tags de OpenStreetMap
+     * que lo identifican. Un mismo type puede corresponder a
+     * varias combinaciones tag=valor (ej. shelter -> alpine_hut
+     * o wilderness_hut).
+     */
+    private static readonly Dictionary<string, (string TagKey, string TagValue)[]> TypeTagMap = new()
+    {
+        ["spring"] = [("natural", "spring")],
+        ["peak"] = [("natural", "peak")],
+        ["cave"] = [("natural", "cave_entrance")],
+        ["drinking_water"] = [("amenity", "drinking_water")],
+        ["shelter"] =
+        [
+            ("tourism", "alpine_hut"),
+            ("tourism", "wilderness_hut"),
+        ],
+        ["viewpoint"] = [("tourism", "viewpoint")],
+        ["campsite"] = [("tourism", "camp_site")],
+        ["hospital"] = [("amenity", "hospital")],
+    };
+
     public OsmService(IWebHostEnvironment environment)
     {
         _osmFilePath = Path.Combine(
@@ -18,7 +40,7 @@ public class OsmService
         );
     }
 
-    public OsmInfo GetInfo()
+    private void EnsureFileExists()
     {
         if (!File.Exists(_osmFilePath))
         {
@@ -27,6 +49,11 @@ public class OsmService
                 _osmFilePath
             );
         }
+    }
+
+    public OsmInfo GetInfo()
+    {
+        EnsureFileExists();
 
         long nodes = 0;
         long ways = 0;
@@ -54,22 +81,12 @@ public class OsmService
             }
         }
 
-        return new OsmInfo(
-            nodes,
-            ways,
-            relations
-        );
+        return new OsmInfo(nodes, ways, relations);
     }
 
     public MountainInfo GetMountainInfo()
     {
-        if (!File.Exists(_osmFilePath))
-        {
-            throw new FileNotFoundException(
-                "No se ha encontrado el fichero OSM.",
-                _osmFilePath
-            );
-        }
+        EnsureFileExists();
 
         long springs = 0;
         long caves = 0;
@@ -137,65 +154,31 @@ public class OsmService
         );
     }
 
-    public MountainFeature? GetFirstSpring()
+    /*
+     * Devuelve todos los tipos soportados (para validación
+     * en el controller, sin duplicar la lista ahí).
+     */
+    public IEnumerable<string> GetSupportedTypes()
     {
-        if (!File.Exists(_osmFilePath))
-        {
-            throw new FileNotFoundException(
-                "No se ha encontrado el fichero OSM.",
-                _osmFilePath
-            );
-        }
-
-        using var fileStream = File.OpenRead(_osmFilePath);
-
-        var source = new PBFOsmStreamSource(fileStream);
-
-        foreach (var osmGeo in source)
-        {
-            if (osmGeo.Tags == null)
-                continue;
-
-            if (!osmGeo.Tags.TryGetValue("natural", out var natural))
-                continue;
-
-            if (natural != "spring")
-                continue;
-
-            if (osmGeo is not Node node)
-                continue;
-
-            return new MountainFeature
-            {
-                Id = node.Id?.ToString() ?? string.Empty,
-                Type = "spring",
-                Name = node.Tags.TryGetValue("name", out var name)
-                    ? name
-                    : null,
-                Latitude = node.Latitude ?? 0,
-                Longitude = node.Longitude ?? 0,
-                Tags = node.Tags
-                    .ToDictionary(
-                        x => x.Key,
-                        x => x.Value
-                    )
-            };
-        }
-
-        return null;
+        return TypeTagMap.Keys;
     }
 
-    public List<MountainFeature> GetSprings()
+    /*
+     * Recorre el extracto OSM y devuelve todos los nodos
+     * que coincidan con el type solicitado.
+     */
+    public List<MountainFeature> GetFeaturesByType(string type)
     {
-        if (!File.Exists(_osmFilePath))
+        EnsureFileExists();
+
+        if (!TypeTagMap.TryGetValue(type, out var tagMatchers))
         {
-            throw new FileNotFoundException(
-                "No se ha encontrado el fichero OSM.",
-                _osmFilePath
+            throw new ArgumentException(
+                $"Tipo no soportado: {type}"
             );
         }
 
-        var springs = new List<MountainFeature>();
+        var features = new List<MountainFeature>();
 
         using var fileStream = File.OpenRead(_osmFilePath);
 
@@ -206,19 +189,21 @@ public class OsmService
             if (osmGeo.Tags == null)
                 continue;
 
-            if (!osmGeo.Tags.TryGetValue("natural", out var natural))
-                continue;
-
-            if (natural != "spring")
-                continue;
-
             if (osmGeo is not Node node)
                 continue;
 
-            springs.Add(new MountainFeature
+            var matches = tagMatchers.Any(matcher =>
+                osmGeo.Tags.TryGetValue(matcher.TagKey, out var value)
+                && value == matcher.TagValue
+            );
+
+            if (!matches)
+                continue;
+
+            features.Add(new MountainFeature
             {
                 Id = node.Id?.ToString() ?? string.Empty,
-                Type = "spring",
+                Type = type,
                 Name = node.Tags.TryGetValue("name", out var name)
                     ? name
                     : null,
@@ -231,7 +216,7 @@ public class OsmService
             });
         }
 
-        return springs;
+        return features;
     }
 }
 

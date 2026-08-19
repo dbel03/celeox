@@ -1,11 +1,13 @@
 import {
-    springIcon,
+    iconByType,
+    emojiByType,
     userLocationIcon,
 } from './icons'
 
 import MarkerClusterGroup from 'react-leaflet-cluster'
 
 import {
+    memo,
     useCallback,
     useEffect,
     useState,
@@ -23,8 +25,8 @@ import {
 import 'leaflet/dist/leaflet.css'
 
 import {
-    getSprings,
-    searchSprings,
+    getAllFeatures,
+    searchFeatures,
 } from '../../services/api'
 
 import type {
@@ -34,6 +36,10 @@ import type {
 import useUserLocation from '../../hooks/useUserLocation'
 
 
+/* =========================================================
+   TIPOS
+========================================================= */
+
 interface MapBounds {
     minLat: number
     maxLat: number
@@ -42,9 +48,156 @@ interface MapBounds {
 }
 
 
+/* =========================================================
+   COMPARAR FEATURES
+========================================================= */
+
 /*
- * Detecta cuando cambia la zona visible del mapa
+ * Comprueba si dos arrays contienen exactamente
+ * los mismos elementos según su ID.
+ *
+ * No importa el orden.
  */
+function areFeaturesEqual(
+    previous: MountainFeature[],
+    next: MountainFeature[]
+) {
+
+    if (
+        previous.length !==
+        next.length
+    ) {
+        return false
+    }
+
+
+    const previousIds =
+        new Set(
+            previous.map(
+                (feature) => feature.id
+            )
+        )
+
+
+    return next.every(
+        (feature) =>
+            previousIds.has(
+                feature.id
+            )
+    )
+}
+
+
+/* =========================================================
+   MARKER
+========================================================= */
+
+const FeatureMarker = memo(
+    function FeatureMarker({
+        feature,
+    }: {
+        feature: MountainFeature
+    }) {
+
+        return (
+
+            <Marker
+                position={[
+                    feature.latitude,
+                    feature.longitude,
+                ]}
+                icon={
+                    iconByType[
+                    feature.type as keyof typeof iconByType
+                    ] ??
+                    userLocationIcon
+                }
+            >
+
+                <Popup>
+
+                    <div className="min-w-[140px] max-w-[180px]">
+
+                        {/* Nombre */}
+
+                        <h3 className="mb-1 text-sm font-bold leading-tight">
+
+                            {emojiByType[
+                                feature.type as keyof typeof emojiByType
+                            ] ?? '📍'}{' '}
+
+                            {feature.name ??
+                                'Sin nombre'}
+
+                        </h3>
+
+
+                        {/* Coordenadas */}
+
+                        <div className="space-y-0.5 text-xs">
+
+                            <p>
+
+                                {feature.latitude.toFixed(5)}
+
+                                {', '}
+
+                                {feature.longitude.toFixed(5)}
+
+                            </p>
+
+                        </div>
+
+
+                        {/* Tags */}
+
+                        {feature.tags && (
+
+                            <div className="mt-1.5 border-t pt-1">
+
+                                <div className="space-y-0.5 text-[10px] text-gray-600">
+
+                                    {Object.entries(
+                                        feature.tags
+                                    ).map(
+                                        ([key, value]) => (
+
+                                            <div
+                                                key={key}
+                                            >
+
+                                                <strong>
+                                                    {key}:
+                                                </strong>{' '}
+
+                                                {value}
+
+                                            </div>
+
+                                        )
+                                    )}
+
+                                </div>
+
+                            </div>
+
+                        )}
+
+                    </div>
+
+                </Popup>
+
+            </Marker>
+
+        )
+    }
+)
+
+
+/* =========================================================
+   EVENTOS DEL MAPA
+========================================================= */
+
 function MapEvents({
     onBoundsChange,
 }: {
@@ -54,57 +207,141 @@ function MapEvents({
     ) => void
 }) {
 
-    const map = useMapEvents({
-
-        moveend: () => {
-
-            const bounds = map.getBounds()
-
-            onBoundsChange(
-                {
-                    minLat: bounds.getSouth(),
-                    maxLat: bounds.getNorth(),
-                    minLon: bounds.getWest(),
-                    maxLon: bounds.getEast(),
-                },
-                map.getZoom()
-            )
-        },
-    })
+    const map = useMap()
 
 
-    /*
-     * Cargar fuentes inicialmente
-     */
     useEffect(() => {
 
-        const bounds = map.getBounds()
+        let timeoutId:
+            number | undefined
+
+
+        /*
+         * Ejecutar cuando termina el movimiento
+         */
+        const handleMoveEnd = () => {
+
+            /*
+             * Cancelar cualquier ejecución pendiente
+             */
+            if (timeoutId !== undefined) {
+
+                window.clearTimeout(
+                    timeoutId
+                )
+
+            }
+
+
+            /*
+             * Esperar 250 ms antes de consultar
+             *
+             * Esto evita llamadas demasiado rápidas
+             * si el usuario mueve el mapa varias veces.
+             */
+            timeoutId =
+                window.setTimeout(() => {
+
+                    const bounds =
+                        map.getBounds()
+
+
+                    onBoundsChange(
+                        {
+                            minLat:
+                                bounds.getSouth(),
+
+                            maxLat:
+                                bounds.getNorth(),
+
+                            minLon:
+                                bounds.getWest(),
+
+                            maxLon:
+                                bounds.getEast(),
+                        },
+
+                        map.getZoom()
+                    )
+
+                }, 250)
+
+        }
+
+
+        map.on(
+            'moveend',
+            handleMoveEnd
+        )
+
+
+        /*
+         * Cargar inicialmente
+         */
+        const initialBounds =
+            map.getBounds()
+
 
         onBoundsChange(
             {
-                minLat: bounds.getSouth(),
-                maxLat: bounds.getNorth(),
-                minLon: bounds.getWest(),
-                maxLon: bounds.getEast(),
+                minLat:
+                    initialBounds.getSouth(),
+
+                maxLat:
+                    initialBounds.getNorth(),
+
+                minLon:
+                    initialBounds.getWest(),
+
+                maxLon:
+                    initialBounds.getEast(),
             },
+
             map.getZoom()
         )
 
-    }, [map, onBoundsChange])
+
+        /*
+         * Limpiar listeners
+         */
+        return () => {
+
+            if (
+                timeoutId !== undefined
+            ) {
+
+                window.clearTimeout(
+                    timeoutId
+                )
+
+            }
+
+
+            map.off(
+                'moveend',
+                handleMoveEnd
+            )
+
+        }
+
+    }, [
+        map,
+        onBoundsChange,
+    ])
 
 
     return null
 }
 
 
-/*
- * Controlador para mover el mapa
- * cuando seleccionamos una fuente
- */
+/* =========================================================
+   CONTROLADOR DE BÚSQUEDA
+========================================================= */
+
 function SearchController({
-    spring,
+    feature,
 }: {
-    spring: MountainFeature | null
+    feature: MountainFeature | null
 }) {
 
     const map = useMap()
@@ -112,15 +349,15 @@ function SearchController({
 
     useEffect(() => {
 
-        if (!spring) {
+        if (!feature) {
             return
         }
 
 
         map.flyTo(
             [
-                spring.latitude,
-                spring.longitude,
+                feature.latitude,
+                feature.longitude,
             ],
             16,
             {
@@ -128,164 +365,232 @@ function SearchController({
             }
         )
 
-    }, [spring, map])
+    }, [
+        feature,
+        map,
+    ])
 
 
     return null
 }
 
 
+/* =========================================================
+   MAP VIEW
+========================================================= */
+
 function MapView() {
 
     /*
-     * Ubicación actual del usuario
-     *
-     * Seguimiento en tiempo real (watch: true)
+     * Ubicación del usuario
      */
     const {
         location: userLocation,
         error,
-    } = useUserLocation({ watch: true })
+    } = useUserLocation({
+        watch: true,
+    })
 
 
     /*
-     * Fuentes visibles en el mapa
+     * Elementos visibles
      */
-    const [springs, setSprings] =
-        useState<MountainFeature[]>([])
+    const [
+        features,
+        setFeatures,
+    ] = useState<MountainFeature[]>([])
 
 
     /*
-     * Resultados del buscador
-     *
-     * Estos vienen directamente de MongoDB.
+     * Resultados de búsqueda
      */
-    const [searchResults, setSearchResults] =
-        useState<MountainFeature[]>([])
+    const [
+        searchResults,
+        setSearchResults,
+    ] = useState<MountainFeature[]>([])
 
 
     /*
      * Zoom actual
      */
-    const [zoom, setZoom] =
-        useState<number>(13)
+    const [
+        zoom,
+        setZoom,
+    ] = useState<number>(13)
 
 
     /*
-     * Texto del buscador
+     * Texto de búsqueda
      */
-    const [search, setSearch] =
-        useState('')
+    const [
+        search,
+        setSearch,
+    ] = useState('')
 
 
     /*
-     * Indica si estamos buscando
+     * Estado de búsqueda
      */
-    const [searching, setSearching] =
-        useState(false)
+    const [
+        searching,
+        setSearching,
+    ] = useState(false)
 
 
     /*
-     * Fuente seleccionada
+     * Elemento seleccionado
      */
-    const [selectedSpring, setSelectedSpring] =
-        useState<MountainFeature | null>(null)
-
-
-    /*
-     * Cargar fuentes según la zona visible
-     */
-    const loadSprings = useCallback(
-        (
-            bounds: MapBounds,
-            zoom: number
-        ) => {
-
-            setZoom(zoom)
-
-
-            /*
-             * Si estamos demasiado alejados,
-             * no mostramos fuentes.
-             */
-            if (zoom < 12) {
-
-                setSprings([])
-
-                return
-            }
-
-
-            getSprings(
-                bounds.minLat,
-                bounds.maxLat,
-                bounds.minLon,
-                bounds.maxLon
-            )
-                .then((data) => {
-
-                    console.log(
-                        'Fuentes de la zona:',
-                        data.length
-                    )
-
-                    setSprings(data)
-
-                })
-                .catch((error) => {
-
-                    console.error(
-                        'Error cargando fuentes:',
-                        error
-                    )
-
-                })
-
-        },
-        []
+    const [
+        selectedFeature,
+        setSelectedFeature,
+    ] = useState<MountainFeature | null>(
+        null
     )
 
 
-    /*
-     * Buscar fuentes en MongoDB
-     *
-     * Esperamos 300 ms después de que el usuario
-     * deje de escribir antes de consultar la API.
-     */
+    /* =====================================================
+       CARGAR ELEMENTOS
+    ===================================================== */
+
+    const loadFeatures =
+        useCallback(
+            (
+                bounds: MapBounds,
+                currentZoom: number
+            ) => {
+
+                /*
+                 * Actualizar zoom solamente
+                 * si realmente ha cambiado.
+                 */
+                setZoom((previousZoom) =>
+                    previousZoom === currentZoom
+                        ? previousZoom
+                        : currentZoom
+                )
+
+
+                /*
+                 * Si estamos demasiado alejados,
+                 * no mostramos elementos.
+                 */
+                if (
+                    currentZoom < 12
+                ) {
+
+                    setFeatures((previous) =>
+                        previous.length === 0
+                            ? previous
+                            : []
+                    )
+
+                    return
+                }
+
+
+                /*
+                 * Consultar API
+                 */
+                getAllFeatures(
+                    bounds.minLat,
+                    bounds.maxLat,
+                    bounds.minLon,
+                    bounds.maxLon
+                )
+                    .then((data) => {
+
+                        setFeatures(
+                            (previous) => {
+
+                                /*
+                                 * Si los elementos
+                                 * son exactamente los mismos,
+                                 * conservar la referencia anterior.
+                                 *
+                                 * Esto es importante para evitar
+                                 * reconstrucciones innecesarias
+                                 * de MarkerClusterGroup.
+                                 */
+                                if (
+                                    areFeaturesEqual(
+                                        previous,
+                                        data
+                                    )
+                                ) {
+
+                                    return previous
+
+                                }
+
+
+                                return data
+
+                            }
+                        )
+
+                    })
+                    .catch((error) => {
+
+                        console.error(
+                            'Error cargando elementos:',
+                            error
+                        )
+
+                    })
+
+            },
+            []
+        )
+
+
+    /* =====================================================
+       BUSCADOR
+    ===================================================== */
+
     useEffect(() => {
 
         /*
-         * Si no hay texto,
-         * limpiar resultados.
+         * Sin texto
          */
-        if (search.trim().length === 0) {
+        if (
+            search.trim().length === 0
+        ) {
 
             setSearchResults([])
 
             setSearching(false)
 
             return
+
         }
 
 
         /*
-         * No buscar con una sola letra.
+         * Mínimo dos caracteres
          */
-        if (search.trim().length < 2) {
+        if (
+            search.trim().length < 2
+        ) {
 
             setSearchResults([])
 
             return
+
         }
 
 
         setSearching(true)
 
 
+        /*
+         * Debounce
+         */
         const timeoutId =
             window.setTimeout(() => {
 
-                searchSprings(search.trim())
+                searchFeatures(
+                    search.trim()
+                )
                     .then((data) => {
 
                         console.log(
@@ -293,22 +598,30 @@ function MapView() {
                             data.length
                         )
 
-                        setSearchResults(data)
+
+                        setSearchResults(
+                            data
+                        )
 
                     })
                     .catch((error) => {
 
                         console.error(
-                            'Error buscando fuentes:',
+                            'Error buscando elementos:',
                             error
                         )
 
-                        setSearchResults([])
+
+                        setSearchResults(
+                            []
+                        )
 
                     })
                     .finally(() => {
 
-                        setSearching(false)
+                        setSearching(
+                            false
+                        )
 
                     })
 
@@ -316,8 +629,7 @@ function MapView() {
 
 
         /*
-         * Cancelar la búsqueda anterior
-         * si el usuario sigue escribiendo.
+         * Cancelar búsqueda anterior
          */
         return () => {
 
@@ -330,41 +642,59 @@ function MapView() {
     }, [search])
 
 
-    /*
-     * Límites del mapa: Catalunya
-     */
+    /* =====================================================
+       LÍMITES DE CATALUNYA
+    ===================================================== */
+
     const catalunyaBounds: [
         [number, number],
         [number, number]
     ] = [
-            [40.5, 0.15],
-            [42.9, 3.35],
+
+            [
+                40.5,
+                0.15,
+            ],
+
+            [
+                42.9,
+                3.35,
+            ],
+
         ]
 
 
-    /*
-     * Mostrar error
-     */
+    /* =====================================================
+       ERROR
+    ===================================================== */
+
     if (error) {
 
         return (
+
             <div className="flex h-full w-full items-center justify-center">
 
                 <p className="text-red-500">
+
                     {error}
+
                 </p>
 
             </div>
+
         )
+
     }
 
 
-    /*
-     * Esperar a obtener la primera posición
-     */
+    /* =====================================================
+       ESPERANDO UBICACIÓN
+    ===================================================== */
+
     if (!userLocation) {
 
         return (
+
             <div className="flex h-full w-full items-center justify-center">
 
                 <p>
@@ -372,18 +702,24 @@ function MapView() {
                 </p>
 
             </div>
+
         )
+
     }
 
+
+    /* =====================================================
+       RENDER
+    ===================================================== */
 
     return (
 
         <div className="relative h-full w-full">
 
 
-            {/* ================================
+            {/* ==========================================
                 BUSCADOR
-            ================================= */}
+            ========================================== */}
 
             <div className="absolute left-16 top-4 z-[1000] w-80">
 
@@ -396,34 +732,31 @@ function MapView() {
                             event.target.value
                         )
 
-                        setSelectedSpring(
+
+                        setSelectedFeature(
                             null
                         )
 
                     }}
-                    placeholder="Buscar fuente..."
+                    placeholder="Buscar fuente, pico, refugio..."
                     className="w-full rounded-lg border bg-white px-4 py-3 shadow-lg outline-none focus:ring-2 focus:ring-blue-500"
                 />
 
 
-                {/* ================================
-                    BUSCANDO
-                ================================= */}
+                {/* BUSCANDO */}
 
                 {searching && (
 
                     <div className="mt-1 rounded-lg bg-white p-3 text-sm text-gray-500 shadow-lg">
 
-                        Buscando fuentes...
+                        Buscando...
 
                     </div>
 
                 )}
 
 
-                {/* ================================
-                    RESULTADOS
-                ================================= */}
+                {/* RESULTADOS */}
 
                 {!searching &&
                     search.length >= 2 &&
@@ -432,21 +765,25 @@ function MapView() {
                         <div className="mt-1 max-h-80 overflow-y-auto rounded-lg bg-white shadow-lg">
 
                             {searchResults.map(
-                                (spring) => (
+                                (feature) => (
 
                                     <button
-                                        key={spring.id}
+                                        key={
+                                            feature.id
+                                        }
                                         type="button"
                                         onClick={() => {
 
-                                            setSelectedSpring(
-                                                spring
+                                            setSelectedFeature(
+                                                feature
                                             )
 
+
                                             setSearch(
-                                                spring.name ??
+                                                feature.name ??
                                                 ''
                                             )
+
 
                                             setSearchResults(
                                                 []
@@ -458,19 +795,27 @@ function MapView() {
 
                                         <div className="font-semibold">
 
-                                            💧{' '}
+                                            {emojiByType[
+                                                feature.type as keyof typeof emojiByType
+                                            ] ?? '📍'}{' '}
 
-                                            {spring.name ??
-                                                'Fuente sin nombre'}
+                                            {feature.name ??
+                                                'Sin nombre'}
 
                                         </div>
 
 
                                         <div className="text-xs text-gray-500">
 
-                                            {spring.latitude.toFixed(5)}
+                                            {feature.latitude.toFixed(
+                                                5
+                                            )}
+
                                             {', '}
-                                            {spring.longitude.toFixed(5)}
+
+                                            {feature.longitude.toFixed(
+                                                5
+                                            )}
 
                                         </div>
 
@@ -484,9 +829,7 @@ function MapView() {
                     )}
 
 
-                {/* ================================
-                    SIN RESULTADOS
-                ================================= */}
+                {/* SIN RESULTADOS */}
 
                 {!searching &&
                     search.length >= 2 &&
@@ -494,7 +837,7 @@ function MapView() {
 
                         <div className="mt-1 rounded-lg bg-white p-4 text-sm text-gray-500 shadow-lg">
 
-                            No se han encontrado fuentes.
+                            No se han encontrado resultados.
 
                         </div>
 
@@ -503,9 +846,9 @@ function MapView() {
             </div>
 
 
-            {/* ================================
+            {/* ==========================================
                 MAPA
-            ================================= */}
+            ========================================== */}
 
             <MapContainer
                 center={userLocation}
@@ -518,14 +861,16 @@ function MapView() {
             >
 
 
-                {/* Controlador del buscador */}
+                {/* CONTROLADOR DE BÚSQUEDA */}
 
                 <SearchController
-                    spring={selectedSpring}
+                    feature={
+                        selectedFeature
+                    }
                 />
 
 
-                {/* Mapa OpenStreetMap */}
+                {/* OPEN STREET MAP */}
 
                 <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -533,20 +878,26 @@ function MapView() {
                 />
 
 
-                {/* Detectar zona visible */}
+                {/* EVENTOS */}
 
                 <MapEvents
-                    onBoundsChange={loadSprings}
+                    onBoundsChange={
+                        loadFeatures
+                    }
                 />
 
 
-                {/* ================================
+                {/* ======================================
                     UBICACIÓN DEL USUARIO
-                ================================= */}
+                ====================================== */}
 
                 <Marker
-                    position={userLocation}
-                    icon={userLocationIcon}
+                    position={
+                        userLocation
+                    }
+                    icon={
+                        userLocationIcon
+                    }
                 >
 
                     <Popup>
@@ -559,103 +910,38 @@ function MapView() {
 
                         Latitud:{' '}
 
-                        {userLocation[0]}
+                        {
+                            userLocation[0]
+                        }
 
                         <br />
 
                         Longitud:{' '}
 
-                        {userLocation[1]}
+                        {
+                            userLocation[1]
+                        }
 
                     </Popup>
 
                 </Marker>
 
 
-                {/* ================================
-                    FUENTES
-                ================================= */}
+                {/* ======================================
+                    ELEMENTOS
+                ====================================== */}
 
-                <MarkerClusterGroup>
+                <MarkerClusterGroup
+                    disableClusteringAtZoom={16}
+                >
 
-                    {springs.map(
-                        (spring) => (
+                    {features.map(
+                        (feature) => (
 
-                            <Marker
-                                key={spring.id}
-                                position={[
-                                    spring.latitude,
-                                    spring.longitude,
-                                ]}
-                                icon={springIcon}
-                            >
-
-                                <Popup>
-
-                                    <div className="min-w-[140px] max-w-[180px]">
-
-                                        {/* Nombre */}
-
-                                        <h3 className="mb-1 text-sm font-bold leading-tight">
-
-                                            💧{' '}
-
-                                            {spring.name ??
-                                                'Fuente sin nombre'}
-
-                                        </h3>
-
-
-                                        {/* Información básica */}
-
-                                        <div className="space-y-0.5 text-xs">
-
-                                            <p>
-                                                {spring.latitude.toFixed(5)}
-                                                {', '}
-                                                {spring.longitude.toFixed(5)}
-                                            </p>
-
-                                        </div>
-
-
-                                        {/* Tags de OpenStreetMap */}
-
-                                        {spring.tags && (
-
-                                            <div className="mt-1.5 border-t pt-1">
-
-                                                <div className="space-y-0.5 text-[10px] text-gray-600">
-
-                                                    {Object.entries(
-                                                        spring.tags
-                                                    ).map(
-                                                        ([key, value]) => (
-
-                                                            <div key={key}>
-
-                                                                <strong>
-                                                                    {key}:
-                                                                </strong>{' '}
-
-                                                                {value}
-
-                                                            </div>
-
-                                                        )
-                                                    )}
-
-                                                </div>
-
-                                            </div>
-
-                                        )}
-
-                                    </div>
-
-                                </Popup>
-
-                            </Marker>
+                            <FeatureMarker
+                                key={feature.id}
+                                feature={feature}
+                            />
 
                         )
                     )}
@@ -665,23 +951,27 @@ function MapView() {
             </MapContainer>
 
 
-            {/* ================================
+            {/* ==========================================
                 INFORMACIÓN
-            ================================= */}
+            ========================================== */}
 
-            <div className="absolute left-4 bottom-4 z-[1000] rounded-lg bg-white p-4 shadow-lg">
+            <div className="absolute bottom-4 left-4 z-[1000] rounded-lg bg-white p-4 shadow-lg">
 
                 <div>
 
                     <strong>
-                        Fuentes: {springs.length}
+                        Elementos:{' '}
+                        {
+                            features.length
+                        }
                     </strong>
 
                 </div>
 
 
                 <div>
-                    Zoom: {zoom}
+                    Zoom:{' '}
+                    {zoom}
                 </div>
 
 
@@ -689,17 +979,28 @@ function MapView() {
 
                     📍{' '}
 
-                    {userLocation[0].toFixed(6)}
+                    {
+                        userLocation[0].toFixed(
+                            6
+                        )
+                    }
+
                     {', '}
-                    {userLocation[1].toFixed(6)}
+
+                    {
+                        userLocation[1].toFixed(
+                            6
+                        )
+                    }
 
                 </div>
 
             </div>
 
-
         </div>
+
     )
+
 }
 
 
