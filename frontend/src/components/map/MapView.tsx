@@ -1,9 +1,9 @@
 import {
     iconByType,
     smallIconByType,
-    emojiByType,
     userLocationIcon,
     selectedFeatureIcon,
+    iconPaths
 } from './icons'
 
 import MarkerClusterGroup from 'react-leaflet-cluster'
@@ -149,10 +149,10 @@ const FeatureMarker = memo(
             ? selectedFeatureIcon
             : isOpen
                 ? iconByType[
-                    feature.type as keyof typeof iconByType
+                feature.type as keyof typeof iconByType
                 ] ?? userLocationIcon
                 : smallIconByType[
-                    feature.type as keyof typeof smallIconByType
+                feature.type as keyof typeof smallIconByType
                 ] ?? userLocationIcon
 
 
@@ -175,17 +175,21 @@ const FeatureMarker = memo(
 
                     <div className="min-w-[140px] max-w-[180px]">
 
+                        <img
+                            src={
+                                iconPaths[
+                                feature.type as keyof typeof iconPaths
+                                ]
+                            }
+                            alt={feature.name ?? feature.type}
+                            className="mb-2 h-24 w-full rounded-md object-cover"
+                        />
+
                         <h3 className="mb-1 text-sm font-bold leading-tight">
-
-                            {emojiByType[
-                                feature.type as keyof typeof emojiByType
-                            ] ?? '📍'}{' '}
-
                             {feature.name ??
                                 'Sin nombre'}
 
                         </h3>
-
 
                         <div className="space-y-0.5 text-xs">
 
@@ -200,7 +204,6 @@ const FeatureMarker = memo(
                             </p>
 
                         </div>
-
 
                         {feature.tags && (
 
@@ -747,17 +750,17 @@ function MapView() {
         [number, number]
     ] = [
 
-        [
-            40.5,
-            0.15,
-        ],
+            [
+                40.5,
+                0.15,
+            ],
 
-        [
-            42.9,
-            3.35,
-        ],
+            [
+                42.9,
+                3.35,
+            ],
 
-    ]
+        ]
 
 
     /* =====================================================
@@ -948,14 +951,8 @@ function MapView() {
                                     >
 
                                         <div className="font-semibold">
-
-                                            {emojiByType[
-                                                feature.type as keyof typeof emojiByType
-                                            ] ?? '📍'}{' '}
-
                                             {feature.name ??
                                                 'Sin nombre'}
-
                                         </div>
 
 
