@@ -46,17 +46,13 @@ function AppNavbar({
                     <img
                         src="/images/logo.png"
                         alt="Celeox logo"
-                        className="h-8 w-8"
+                        className="h-15 w-15"
                     />
 
                     <span>
-                        <span className="text-emerald-500">
-                            CELE
-                        </span>
-
-                        <span className="text-white">
-                            OX
-                        </span>
+                        <span className="text-white">CE</span>
+                        <span className="text-emerald-500">LEO</span>
+                        <span className="text-[#0F52BA]">X</span>
                     </span>
 
                 </button>

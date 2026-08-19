@@ -28,18 +28,17 @@ function Header({
       {/* Contenido superior */}
       <div className="relative z-10 flex items-center justify-between px-6 py-4 lg:px-12">
         <button type="button" className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-          <img
-            src="/images/logo.png"
-            alt="Celeox logo"
-            className="h-8 w-8"
-          />
           <span className="rounded-full border border-white/40 bg-white/10 px-5 py-2.5 text-[20px] font-medium text-white backdrop-blur-md transition hover:bg-white/20">
-            <span className="text-white">CEL</span>
-            <span className="text-emerald-500">EO</span>
+            <span className="text-white">CE</span>
+            <span className="text-emerald-500">LEO</span>
             <span className="text-[#0F52BA]">X</span>
           </span>
         </button>
-
+            <img
+              src="/images/logo.png"
+              alt="Celeox logo"
+              className="h-30 w-30"
+            />
         <button
           type="button"
           onClick={onLogin}
