@@ -1,11 +1,35 @@
-import MapView from './components/map/MapView'
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+} from 'react-router-dom'
+
+import Home from './components/layout/Home'
+import MapPage from './pages/MapPage'
+
 
 function App() {
-    return (
-        <div className="h-screen w-screen">
-            <MapView />
-        </div>
-    )
+
+  return (
+    <BrowserRouter>
+
+      <Routes>
+
+        <Route
+          path="/"
+          element={<Home />}
+        />
+
+        <Route
+          path="/map"
+          element={<MapPage />}
+        />
+
+      </Routes>
+
+    </BrowserRouter>
+  )
 }
+
 
 export default App
