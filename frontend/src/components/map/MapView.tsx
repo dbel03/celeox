@@ -2,6 +2,7 @@ import {
     iconByType,
     emojiByType,
     userLocationIcon,
+    selectedFeatureIcon,
 } from './icons'
 
 import MarkerClusterGroup from 'react-leaflet-cluster'
@@ -10,6 +11,7 @@ import {
     memo,
     useCallback,
     useEffect,
+    useRef,
     useState,
 } from 'react'
 
@@ -18,8 +20,10 @@ import {
     Marker,
     Popup,
     TileLayer,
-    useMap
+    useMap,
 } from 'react-leaflet'
+
+import type { Marker as LeafletMarker } from 'leaflet'
 
 import 'leaflet/dist/leaflet.css'
 
@@ -94,22 +98,61 @@ function areFeaturesEqual(
 const FeatureMarker = memo(
     function FeatureMarker({
         feature,
+        selected,
     }: {
         feature: MountainFeature
+        selected: boolean
     }) {
+
+        /*
+         * Referencia al Marker de Leaflet.
+         *
+         * Nos permite abrir el Popup
+         * automáticamente cuando el elemento
+         * es seleccionado mediante el buscador.
+         */
+        const markerRef =
+            useRef<LeafletMarker | null>(null)
+
+
+        /* =================================================
+           ABRIR POPUP AL SELECCIONAR
+        ================================================= */
+
+        useEffect(() => {
+
+            if (
+                selected &&
+                markerRef.current
+            ) {
+
+                markerRef.current.openPopup()
+
+            }
+
+        }, [
+            selected,
+        ])
+
+
+        /* =================================================
+           RENDER
+        ================================================= */
 
         return (
 
             <Marker
+                ref={markerRef}
                 position={[
                     feature.latitude,
                     feature.longitude,
                 ]}
                 icon={
-                    iconByType[
-                    feature.type as keyof typeof iconByType
-                    ] ??
-                    userLocationIcon
+                    selected
+                        ? selectedFeatureIcon
+                        : iconByType[
+                            feature.type as keyof typeof iconByType
+                        ] ?? userLocationIcon
                 }
             >
 
@@ -117,7 +160,9 @@ const FeatureMarker = memo(
 
                     <div className="min-w-[140px] max-w-[180px]">
 
-                        {/* Nombre */}
+                        {/* =================================
+                            NOMBRE
+                        ================================= */}
 
                         <h3 className="mb-1 text-sm font-bold leading-tight">
 
@@ -131,7 +176,9 @@ const FeatureMarker = memo(
                         </h3>
 
 
-                        {/* Coordenadas */}
+                        {/* =================================
+                            COORDENADAS
+                        ================================= */}
 
                         <div className="space-y-0.5 text-xs">
 
@@ -148,7 +195,9 @@ const FeatureMarker = memo(
                         </div>
 
 
-                        {/* Tags */}
+                        {/* =================================
+                            TAGS
+                        ================================= */}
 
                         {feature.tags && (
 
@@ -215,15 +264,18 @@ function MapEvents({
             number | undefined
 
 
-        /*
-         * Ejecutar cuando termina el movimiento
-         */
+        /* ================================================
+           MOVIMIENTO FINALIZADO
+        ================================================= */
+
         const handleMoveEnd = () => {
 
             /*
-             * Cancelar cualquier ejecución pendiente
+             * Cancelar cualquier ejecución pendiente.
              */
-            if (timeoutId !== undefined) {
+            if (
+                timeoutId !== undefined
+            ) {
 
                 window.clearTimeout(
                     timeoutId
@@ -233,7 +285,7 @@ function MapEvents({
 
 
             /*
-             * Esperar 250 ms antes de consultar
+             * Esperar 250 ms antes de consultar.
              *
              * Esto evita llamadas demasiado rápidas
              * si el usuario mueve el mapa varias veces.
@@ -274,9 +326,10 @@ function MapEvents({
         )
 
 
-        /*
-         * Cargar inicialmente
-         */
+        /* ================================================
+           CARGA INICIAL
+        ================================================= */
+
         const initialBounds =
             map.getBounds()
 
@@ -300,9 +353,10 @@ function MapEvents({
         )
 
 
-        /*
-         * Limpiar listeners
-         */
+        /* ================================================
+           LIMPIAR
+        ================================================= */
+
         return () => {
 
             if (
@@ -353,12 +407,16 @@ function SearchController({
         }
 
 
+        /*
+         * Zoom 17 para asegurarnos de que el Marker
+         * ya no pertenece al cluster.
+         */
         map.flyTo(
             [
                 feature.latitude,
                 feature.longitude,
             ],
-            16,
+            17,
             {
                 duration: 1.5,
             }
@@ -505,10 +563,6 @@ function MapView() {
                                  * Si los elementos
                                  * son exactamente los mismos,
                                  * conservar la referencia anterior.
-                                 *
-                                 * Esto es importante para evitar
-                                 * reconstrucciones innecesarias
-                                 * de MarkerClusterGroup.
                                  */
                                 if (
                                     areFeaturesEqual(
@@ -543,6 +597,44 @@ function MapView() {
 
 
     /* =====================================================
+       QUITAR SELECCIÓN AUTOMÁTICAMENTE
+    ===================================================== */
+
+    useEffect(() => {
+
+        if (!selectedFeature) {
+            return
+        }
+
+
+        /*
+         * Mantener el marcador rojo y el popup
+         * durante 5 segundos.
+         */
+        const timeoutId =
+            window.setTimeout(() => {
+
+                setSelectedFeature(
+                    null
+                )
+
+            }, 5000)
+
+
+        return () => {
+
+            window.clearTimeout(
+                timeoutId
+            )
+
+        }
+
+    }, [
+        selectedFeature,
+    ])
+
+
+    /* =====================================================
        BUSCADOR
     ===================================================== */
 
@@ -572,6 +664,8 @@ function MapView() {
         ) {
 
             setSearchResults([])
+
+            setSearching(false)
 
             return
 
@@ -638,7 +732,9 @@ function MapView() {
 
         }
 
-    }, [search])
+    }, [
+        search,
+    ])
 
 
     /* =====================================================
@@ -650,17 +746,17 @@ function MapView() {
         [number, number]
     ] = [
 
-            [
-                40.5,
-                0.15,
-            ],
+        [
+            40.5,
+            0.15,
+        ],
 
-            [
-                42.9,
-                3.35,
-            ],
+        [
+            42.9,
+            3.35,
+        ],
 
-        ]
+    ]
 
 
     /* =====================================================
@@ -727,13 +823,17 @@ function MapView() {
                     value={search}
                     onChange={(event) => {
 
-                        setSearch(
-                            event.target.value
+                        /*
+                         * Si el usuario vuelve a escribir,
+                         * quitamos el marcador seleccionado.
+                         */
+                        setSelectedFeature(
+                            null
                         )
 
 
-                        setSelectedFeature(
-                            null
+                        setSearch(
+                            event.target.value
                         )
 
                     }}
@@ -742,7 +842,9 @@ function MapView() {
                 />
 
 
-                {/* BUSCANDO */}
+                {/* ======================================
+                    BUSCANDO
+                ====================================== */}
 
                 {searching && (
 
@@ -755,10 +857,12 @@ function MapView() {
                 )}
 
 
-                {/* RESULTADOS */}
+                {/* ======================================
+                    RESULTADOS
+                ====================================== */}
 
                 {!searching &&
-                    search.length >= 2 &&
+                    search.trim().length >= 2 &&
                     searchResults.length > 0 && (
 
                         <div className="mt-1 max-h-80 overflow-y-auto rounded-lg bg-white shadow-lg">
@@ -773,17 +877,67 @@ function MapView() {
                                         type="button"
                                         onClick={() => {
 
+                                            /*
+                                             * Limpiar selección anterior.
+                                             */
+                                            setSelectedFeature(
+                                                null
+                                            )
+
+
+                                            /*
+                                             * Asegurarnos de que el
+                                             * resultado existe en features.
+                                             */
+                                            setFeatures(
+                                                (previous) => {
+
+                                                    const exists =
+                                                        previous.some(
+                                                            (item) =>
+                                                                item.id ===
+                                                                feature.id
+                                                        )
+
+
+                                                    if (
+                                                        exists
+                                                    ) {
+
+                                                        return previous
+
+                                                    }
+
+
+                                                    return [
+                                                        ...previous,
+                                                        feature,
+                                                    ]
+
+                                                }
+                                            )
+
+
+                                            /*
+                                             * Seleccionar el nuevo elemento.
+                                             */
                                             setSelectedFeature(
                                                 feature
                                             )
 
 
+                                            /*
+                                             * Mostrar nombre
+                                             * en el buscador.
+                                             */
                                             setSearch(
-                                                feature.name ??
-                                                ''
+                                                feature.name ?? ''
                                             )
 
 
+                                            /*
+                                             * Ocultar resultados.
+                                             */
                                             setSearchResults(
                                                 []
                                             )
@@ -828,11 +982,14 @@ function MapView() {
                     )}
 
 
-                {/* SIN RESULTADOS */}
+                {/* ======================================
+                    SIN RESULTADOS
+                ====================================== */}
 
                 {!searching &&
-                    search.length >= 2 &&
-                    searchResults.length === 0 && (
+                    search.trim().length >= 2 &&
+                    searchResults.length === 0 &&
+                    !selectedFeature && (
 
                         <div className="mt-1 rounded-lg bg-white p-4 text-sm text-gray-500 shadow-lg">
 
@@ -860,7 +1017,9 @@ function MapView() {
             >
 
 
-                {/* CONTROLADOR DE BÚSQUEDA */}
+                {/* ======================================
+                    CONTROLADOR DE BÚSQUEDA
+                ====================================== */}
 
                 <SearchController
                     feature={
@@ -869,7 +1028,9 @@ function MapView() {
                 />
 
 
-                {/* OPEN STREET MAP */}
+                {/* ======================================
+                    OPEN STREET MAP
+                ====================================== */}
 
                 <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -877,7 +1038,9 @@ function MapView() {
                 />
 
 
-                {/* EVENTOS */}
+                {/* ======================================
+                    EVENTOS
+                ====================================== */}
 
                 <MapEvents
                     onBoundsChange={
@@ -938,8 +1101,16 @@ function MapView() {
                         (feature) => (
 
                             <FeatureMarker
-                                key={feature.id}
-                                feature={feature}
+                                key={
+                                    feature.id
+                                }
+                                feature={
+                                    feature
+                                }
+                                selected={
+                                    selectedFeature?.id ===
+                                    feature.id
+                                }
                             />
 
                         )
@@ -969,8 +1140,11 @@ function MapView() {
 
 
                 <div>
+
                     Zoom:{' '}
+
                     {zoom}
+
                 </div>
 
 
