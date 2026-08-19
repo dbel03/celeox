@@ -11,11 +11,14 @@ interface FeatureDetailPanelProps {
 
 
 /*
- * Panel lateral (derecha de la pantalla) con la ficha completa
- * de un elemento del mapa: foto grande, nombre, coordenadas,
- * tags de OSM y acciones de edición.
+ * Ficha de detalle de un elemento del mapa.
  *
- * Se muestra/oculta según si "feature" es null o no.
+ * - Móvil: bottom sheet, ocupa parte inferior de la pantalla
+ *   (deja el mapa visible arriba), con esquinas redondeadas arriba.
+ * - Escritorio (sm: en adelante): tarjeta flotante centrada
+ *   verticalmente a la derecha, separada de los bordes,
+ *   con altura máxima (no toca el navbar de arriba ni el borde
+ *   inferior si el contenido es más pequeño que la pantalla).
  */
 function FeatureDetailPanel({
     feature,
@@ -36,19 +39,36 @@ function FeatureDetailPanel({
 
     return (
 
-        <div className="absolute right-0 top-0 z-[1100] flex h-full w-full max-w-sm flex-col bg-white shadow-2xl">
+        <div
+            className="
+                absolute inset-x-0 bottom-0 z-[1100]
+                flex max-h-[65%] w-full flex-col
+                rounded-t-3xl bg-white shadow-2xl
+                sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-1/2
+                sm:w-full sm:max-w-sm sm:-translate-y-1/2
+                sm:max-h-[85vh] sm:rounded-2xl sm:overflow-hidden
+            "
+        >
+
+            {/* ======================================
+                TIRADOR (solo móvil)
+            ====================================== */}
+
+            <div className="flex shrink-0 justify-center pt-2 sm:hidden">
+                <div className="h-1 w-10 rounded-full bg-slate-300" />
+            </div>
 
 
             {/* ======================================
                 FOTO + BOTÓN CERRAR
             ====================================== */}
 
-            <div className="relative h-56 w-full shrink-0">
+            <div className="relative h-40 w-full shrink-0 sm:h-56">
 
                 <img
                     src={imagePath}
                     alt={feature.name ?? feature.type}
-                    className="h-full w-full object-cover"
+                    className="h-full w-full rounded-t-2xl object-cover sm:rounded-none"
                 />
 
                 <button
