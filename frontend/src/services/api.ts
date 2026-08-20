@@ -7,8 +7,14 @@ const API_URL = '/api'
 
 
 /*
+ * ============================================
+ * TIPOS DE FEATURES
+ * ============================================
+ */
+
+/*
  * Lista de tipos de elemento que existen en el mapa.
- * Debe coincidir con SupportedTypes / TypeTagMap del backend
+ * Debe coincidir con SupportedTypes / TypeTagMap
  * (OsmController / OsmService).
  */
 export const FEATURE_TYPES = [
@@ -21,27 +27,42 @@ export const FEATURE_TYPES = [
     'hospital',
 ] as const
 
-/*
- * FeatureType es un tipo "unión de literales" derivado de FEATURE_TYPES.
- * Equivale a: 'spring' | 'peak' | 'cave' | 'shelter' | 'viewpoint' | 'campsite' | 'hospital'
- *
- * Sirve para que TypeScript te avise si escribes un tipo que no existe
- * (ej. getFeatures('waterfall', ...) daría error de compilación),
- * y para tipar de forma segura los Record<FeatureType, ...> de icons.ts.
- */
-export type FeatureType = typeof FEATURE_TYPES[number]
 
+/*
+ * FeatureType es un tipo "unión de literales" derivado
+ * de FEATURE_TYPES.
+ */
+export type FeatureType =
+    typeof FEATURE_TYPES[number]
+
+
+/*
+ * ============================================
+ * MAPA
+ * ============================================
+ */
 
 export async function getMap() {
-    const response = await fetch(`${API_URL}/map`)
+
+    const response = await fetch(
+        `${API_URL}/map`
+    )
 
     if (!response.ok) {
-        throw new Error(`Error de API: ${response.status}`)
+        throw new Error(
+            `Error de API: ${response.status}`
+        )
     }
 
     return response.json()
 }
 
+
+/*
+ * ============================================
+ * FEATURES
+ * ============================================
+ */
 
 export async function getFeatures(
     type: FeatureType,
@@ -50,6 +71,7 @@ export async function getFeatures(
     minLon: number,
     maxLon: number
 ): Promise<MountainFeature[]> {
+
     const params = new URLSearchParams({
         type,
         minLat: minLat.toString(),
@@ -63,7 +85,9 @@ export async function getFeatures(
     )
 
     if (!response.ok) {
-        throw new Error(`Error de API: ${response.status}`)
+        throw new Error(
+            `Error de API: ${response.status}`
+        )
     }
 
     return response.json()
@@ -84,7 +108,13 @@ export async function getAllFeatures(
 
     const results = await Promise.all(
         FEATURE_TYPES.map((type) =>
-            getFeatures(type, minLat, maxLat, minLon, maxLon)
+            getFeatures(
+                type,
+                minLat,
+                maxLat,
+                minLon,
+                maxLon
+            )
         )
     )
 
@@ -92,12 +122,20 @@ export async function getAllFeatures(
 }
 
 
+/*
+ * Busca features por nombre.
+ *
+ * Si se indica type, limita la búsqueda
+ * a ese tipo de feature.
+ */
 export async function searchFeatures(
     name: string,
     type?: FeatureType
 ): Promise<MountainFeature[]> {
 
-    const params = new URLSearchParams({ name })
+    const params = new URLSearchParams({
+        name,
+    })
 
     if (type) {
         params.set('type', type)
@@ -114,4 +152,182 @@ export async function searchFeatures(
     }
 
     return response.json()
+}
+
+
+/*
+ * ============================================
+ * IMÁGENES
+ * ============================================
+ */
+
+/*
+ * Imagen de una MountainFeature.
+ *
+ * La URL es temporal porque el bucket de
+ * Backblaze B2 es privado.
+ */
+export interface MountainImage {
+    id: string
+    imageKey: string
+    url: string
+    fileName: string
+}
+
+/*
+ * Respuesta del backend al solicitar
+ * todas las imágenes de una feature.
+ *
+ * GET /api/images/{id}
+ *
+ * El backend devuelve un array de imágenes.
+ */
+export type GetImagesResponse =
+    MountainImage[]
+
+
+/*
+ * ============================================
+ * OBTENER IMÁGENES
+ * ============================================
+ */
+
+/*
+ * Obtiene todas las imágenes de una feature.
+ *
+ * GET /api/images/{id}
+ *
+ * Devuelve las URLs temporales de Backblaze.
+ */
+export async function getImages(
+    id: string
+): Promise<MountainImage[]> {
+
+    const response = await fetch(
+        `${API_URL}/images/${encodeURIComponent(id)}`
+    )
+
+    if (!response.ok) {
+
+        /*
+         * Si la feature no tiene imágenes,
+         * el backend puede devolver 404.
+         *
+         * Lo convertimos en un array vacío
+         * para simplificar el frontend.
+         */
+        if (response.status === 404) {
+            return []
+        }
+
+        const errorText =
+            await response.text()
+
+        throw new Error(
+            errorText ||
+            `Error obteniendo imágenes: ${response.status}`
+        )
+    }
+
+    const result =
+        await response.json()
+
+    /*
+     * El backend debería devolver directamente
+     * un array.
+     */
+    return result
+}
+
+
+/*
+ * ============================================
+ * SUBIR IMAGEN
+ * ============================================
+ */
+
+/*
+ * Sube una nueva imagen para una feature.
+ *
+ * POST /api/images/{id}
+ *
+ * El backend recibe multipart/form-data
+ * con el campo "file".
+ *
+ * IMPORTANTE:
+ *
+ * Esta función NO elimina las imágenes anteriores.
+ * Permite tener varias imágenes por feature.
+ */
+export async function uploadImage(
+    id: string,
+    file: File
+): Promise<MountainImage> {
+
+    const formData = new FormData()
+
+    formData.append(
+        'file',
+        file
+    )
+
+    const response = await fetch(
+        `${API_URL}/images/${encodeURIComponent(id)}`,
+        {
+            method: 'POST',
+            body: formData,
+        }
+    )
+
+    if (!response.ok) {
+
+        const errorText =
+            await response.text()
+
+        throw new Error(
+            errorText ||
+            `Error subiendo la imagen: ${response.status}`
+        )
+    }
+
+    return response.json()
+}
+
+
+/*
+ * ============================================
+ * ELIMINAR IMAGEN
+ * ============================================
+ */
+
+/*
+ * Elimina UNA imagen concreta.
+ *
+ * DELETE /api/images/{id}/{imageKey}
+ *
+ * El imageKey identifica el objeto concreto
+ * dentro de Backblaze B2.
+ */
+export async function deleteImage(
+    id: string,
+    imageKey: string
+): Promise<void> {
+
+    const response = await fetch(
+        `${API_URL}/images/${encodeURIComponent(id)}/${encodeURIComponent(imageKey)}`,
+        {
+            method: 'DELETE',
+        }
+    )
+
+    if (!response.ok) {
+
+        const errorText =
+            await response.text()
+
+        throw new Error(
+            errorText ||
+            `Error eliminando la imagen: ${response.status}`
+        )
+    }
 }

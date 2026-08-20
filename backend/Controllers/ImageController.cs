@@ -21,18 +21,22 @@ public class ImageController : ControllerBase
         _backblazeService = backblazeService;
     }
 
+
     /*
-     * Sube una imagen para una MountainFeature.
+     * ============================================
+     * SUBIR IMAGEN
+     * ============================================
      *
-     * POST /api/images/{id}
+     * POST /api/images/{featureId}
      *
-     * La imagen se guarda en Backblaze B2 y se almacena
-     * en MongoDB la referencia al objeto y el nombre original.
+     * Añade una nueva imagen a la MountainFeature.
+     *
+     * No elimina las imágenes anteriores.
      */
-    [HttpPost("{id}")]
+    [HttpPost("{featureId}")]
     [RequestSizeLimit(10 * 1024 * 1024)]
     public async Task<IActionResult> UploadImage(
-        string id,
+        string featureId,
         IFormFile file)
     {
         if (file == null || file.Length == 0)
@@ -42,8 +46,12 @@ public class ImageController : ControllerBase
             );
         }
 
+
+        /*
+         * Buscamos la MountainFeature.
+         */
         var feature = await _mongoDbContext.MountainFeatures
-            .Find(x => x.Id == id)
+            .Find(x => x.Id == featureId)
             .FirstOrDefaultAsync();
 
         if (feature == null)
@@ -53,6 +61,10 @@ public class ImageController : ControllerBase
             );
         }
 
+
+        /*
+         * Tipos de imagen permitidos.
+         */
         var allowedTypes = new[]
         {
             "image/jpeg",
@@ -60,21 +72,30 @@ public class ImageController : ControllerBase
             "image/webp"
         };
 
-        if (!allowedTypes.Contains(
-            file.ContentType.ToLowerInvariant()))
+
+        var contentType =
+            file.ContentType.ToLowerInvariant();
+
+
+        if (!allowedTypes.Contains(contentType))
         {
             return BadRequest(
                 "Formato no permitido. Usa JPG, PNG o WEBP."
             );
         }
 
-        var extension = file.ContentType.ToLowerInvariant() switch
+
+        /*
+         * Determinamos la extensión.
+         */
+        var extension = contentType switch
         {
             "image/jpeg" => ".jpg",
             "image/png" => ".png",
             "image/webp" => ".webp",
             _ => null
         };
+
 
         if (extension == null)
         {
@@ -83,125 +104,115 @@ public class ImageController : ControllerBase
             );
         }
 
+
         /*
-         * Generamos un nombre único para B2.
-         *
-         * No utilizamos directamente el nombre original
-         * para evitar colisiones entre archivos.
+         * Generamos un nombre único.
          */
         var uniqueFileName =
             $"{Guid.NewGuid():N}{extension}";
 
-        var objectKey =
-            $"mountain-features/{id}/{uniqueFileName}";
 
         /*
-         * Guardamos el nombre original solamente como
-         * información en MongoDB.
+         * Ruta dentro de Backblaze B2.
+         *
+         * Cada MountainFeature tiene su propia carpeta.
+         */
+        var objectKey =
+            $"mountain-features/{featureId}/{uniqueFileName}";
+
+
+        /*
+         * Guardamos el nombre original.
          */
         var originalFileName =
             Path.GetFileName(file.FileName);
 
+
         /*
-         * Subimos la imagen a Backblaze B2.
+         * Subimos el archivo a Backblaze B2.
          */
-        await using var stream = file.OpenReadStream();
+        await using var stream =
+            file.OpenReadStream();
+
 
         await _backblazeService.UploadAsync(
             stream,
             objectKey,
-            file.ContentType
+            contentType
         );
 
+
         /*
-         * Si la feature ya tenía una imagen,
-         * eliminamos la anterior de Backblaze.
+         * Creamos la referencia de la imagen.
          */
-        if (!string.IsNullOrWhiteSpace(feature.ImageKey))
+        var image = new MountainImage
         {
-            await _backblazeService.DeleteAsync(
-                feature.ImageKey
-            );
-        }
+            Id = Guid.NewGuid().ToString("N"),
+            ImageKey = objectKey,
+            FileName = originalFileName
+        };
+
 
         /*
-         * Actualizamos MongoDB.
+         * Añadimos la imagen al array Images
+         * de MongoDB.
          */
-        var update = Builders<MountainFeature>
-            .Update
-            .Set(x => x.ImageKey, objectKey)
-            .Set(x => x.ImageFileName, originalFileName);
-
-        await _mongoDbContext.MountainFeatures.UpdateOneAsync(
-            x => x.Id == id,
-            update
-        );
-
-        return Ok(new
-        {
-            imageKey = objectKey,
-            imageFileName = originalFileName
-        });
-    }
+        var update =
+            Builders<MountainFeature>
+                .Update
+                .Push(
+                    x => x.Images,
+                    image
+                );
 
 
-    /*
-     * Obtiene una URL temporal para visualizar la imagen.
-     *
-     * GET /api/images/{id}
-     */
-    [HttpGet("{id}")]
-    public async Task<IActionResult> GetImage(
-        string id)
-    {
-        var feature = await _mongoDbContext.MountainFeatures
-            .Find(x => x.Id == id)
-            .FirstOrDefaultAsync();
-
-        if (feature == null)
-        {
-            return NotFound(
-                "La MountainFeature no existe."
+        await _mongoDbContext.MountainFeatures
+            .UpdateOneAsync(
+                x => x.Id == featureId,
+                update
             );
-        }
 
-        if (string.IsNullOrWhiteSpace(feature.ImageKey))
-        {
-            return NotFound(
-                "La MountainFeature no tiene ninguna imagen."
-            );
-        }
 
         /*
-         * Generamos una URL temporal.
+         * Generamos una URL temporal inmediatamente.
          *
-         * El bucket de B2 continúa siendo privado.
+         * Esto permite que el frontend pueda mostrar
+         * la imagen recién subida sin hacer otra petición.
          */
-        var url = _backblazeService.GetTemporaryUrl(
-            feature.ImageKey,
-            expirationMinutes: 60
-        );
+        var url =
+            _backblazeService.GetTemporaryUrl(
+                image.ImageKey,
+                expirationMinutes: 60
+            );
+
 
         return Ok(new
         {
+            id = image.Id,
             url,
-            fileName = feature.ImageFileName
+            fileName = image.FileName
         });
     }
 
 
     /*
-     * Elimina la imagen de una MountainFeature.
+     * ============================================
+     * OBTENER IMÁGENES
+     * ============================================
      *
-     * DELETE /api/images/{id}
+     * GET /api/images/{featureId}
+     *
+     * Devuelve todas las imágenes de una feature
+     * con URLs temporales de Backblaze B2.
      */
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteImage(
-        string id)
+    [HttpGet("{featureId}")]
+    public async Task<IActionResult> GetImages(
+        string featureId)
     {
         var feature = await _mongoDbContext.MountainFeatures
-            .Find(x => x.Id == id)
+            .Find(x => x.Id == featureId)
             .FirstOrDefaultAsync();
+
 
         if (feature == null)
         {
@@ -210,33 +221,114 @@ public class ImageController : ControllerBase
             );
         }
 
-        /*
-         * Si no tiene imagen, no hay nada que borrar.
-         */
-        if (string.IsNullOrWhiteSpace(feature.ImageKey))
-        {
-            return NoContent();
-        }
 
         /*
-         * Eliminamos la imagen de Backblaze.
+         * Si no tiene imágenes,
+         * devolvemos un array vacío.
+         *
+         * Esto es mejor que devolver 404 porque
+         * la feature sí existe.
+         */
+        if (feature.Images == null ||
+            feature.Images.Count == 0)
+        {
+            return Ok(Array.Empty<object>());
+        }
+
+
+        /*
+         * Generamos una URL temporal para cada imagen.
+         */
+        var images = feature.Images
+            .Select(image => new
+            {
+                id = image.Id,
+
+                url = _backblazeService.GetTemporaryUrl(
+                    image.ImageKey,
+                    expirationMinutes: 60
+                ),
+
+                fileName = image.FileName
+            })
+            .ToList();
+
+
+        return Ok(images);
+    }
+
+
+    /*
+     * ============================================
+     * ELIMINAR UNA IMAGEN
+     * ============================================
+     *
+     * DELETE /api/images/{featureId}/{imageId}
+     *
+     * Elimina únicamente la imagen indicada.
+     */
+    [HttpDelete("{featureId}/{imageId}")]
+    public async Task<IActionResult> DeleteImage(
+        string featureId,
+        string imageId)
+    {
+        var feature = await _mongoDbContext.MountainFeatures
+            .Find(x => x.Id == featureId)
+            .FirstOrDefaultAsync();
+
+
+        if (feature == null)
+        {
+            return NotFound(
+                "La MountainFeature no existe."
+            );
+        }
+
+
+        /*
+         * Buscamos la imagen concreta.
+         */
+        var image = feature.Images?
+            .FirstOrDefault(
+                x => x.Id == imageId
+            );
+
+
+        if (image == null)
+        {
+            return NotFound(
+                "La imagen no existe."
+            );
+        }
+
+
+        /*
+         * Primero eliminamos el objeto de B2.
          */
         await _backblazeService.DeleteAsync(
-            feature.ImageKey
+            image.ImageKey
         );
+
 
         /*
-         * Eliminamos la referencia de MongoDB.
+         * Después eliminamos la referencia
+         * del array Images en MongoDB.
          */
-        var update = Builders<MountainFeature>
-            .Update
-            .Set(x => x.ImageKey, null)
-            .Set(x => x.ImageFileName, null);
+        var update =
+            Builders<MountainFeature>
+                .Update
+                .PullFilter(
+                    x => x.Images,
+                    x => x.Id == imageId
+                );
 
-        await _mongoDbContext.MountainFeatures.UpdateOneAsync(
-            x => x.Id == id,
-            update
-        );
+
+        await _mongoDbContext.MountainFeatures
+            .UpdateOneAsync(
+                x => x.Id == featureId,
+                update
+            );
+
 
         return NoContent();
     }

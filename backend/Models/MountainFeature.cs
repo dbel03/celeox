@@ -17,8 +17,6 @@ public class MountainFeature
     public double Longitude { get; set; }
 
     public Dictionary<string, string>? Tags { get; set; }
-
-    public string? ImageKey { get; set; }
-
-    public string? ImageFileName { get; set; }
+    
+     public List<MountainImage> Images { get; set; } = new();
 }
