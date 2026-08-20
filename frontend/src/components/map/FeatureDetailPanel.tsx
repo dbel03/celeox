@@ -38,6 +38,7 @@ function FeatureDetailPanel({
         ]
 
     return (
+        
 
         <div
             className="

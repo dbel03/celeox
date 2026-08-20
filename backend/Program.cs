@@ -16,8 +16,15 @@ builder.Services.AddOpenApi();
 builder.Services.Configure<MongoDbSettings>(
     builder.Configuration.GetSection("MongoDB")
 );
-
+//Registro del servicio
 builder.Services.AddSingleton<MongoDbContext>();
+
+// Backblaze B2
+builder.Services.Configure<BackblazeSettings>(
+    builder.Configuration.GetSection("Backblaze")
+);
+//Registro del servicio
+builder.Services.AddSingleton<BackblazeService>();
 
 var app = builder.Build();
 
