@@ -3,11 +3,7 @@ using CeleoxApi.Models;
 using CeleoxApi.Services;
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Formats.Webp;
-using SixLabors.ImageSharp.Formats.Png;
+using SkiaSharp;
 
 namespace CeleoxApi.Controllers;
 
@@ -348,63 +344,82 @@ public class ImageController : ControllerBase
     }
 
     /*
-    * Redimensiona si excede MaxDimension y
-    * recomprime con la calidad objetivo.
-    *
-    * Devuelve un nuevo stream ya optimizado,
-    * listo para subir a B2.
-    */
+     * Redimensiona si excede MaxDimension y
+     * recomprime con la calidad objetivo.
+     *
+     * Devuelve un nuevo stream ya optimizado,
+     * listo para subir a B2.
+     */
     private async Task<MemoryStream> OptimizeImageAsync(
         Stream inputStream,
         string contentType)
     {
-        using var image =
-            await Image.LoadAsync(inputStream);
+        using var originalBitmap =
+            SKBitmap.Decode(inputStream);
+
+        if (originalBitmap == null)
+        {
+            throw new InvalidOperationException(
+                "No se ha podido decodificar la imagen."
+            );
+        }
+
+        SKBitmap resizedBitmap = originalBitmap;
 
         /*
          * Redimensionamos solo si supera el máximo,
          * nunca ampliamos imágenes pequeñas.
          */
-        if (image.Width > MaxDimension ||
-            image.Height > MaxDimension)
+        if (originalBitmap.Width > MaxDimension ||
+            originalBitmap.Height > MaxDimension)
         {
-            image.Mutate(x => x.Resize(
-                new ResizeOptions
-                {
-                    Mode = ResizeMode.Max,
-                    Size = new Size(MaxDimension, MaxDimension)
-                }
-            ));
+            var scale =
+                (float)MaxDimension /
+                Math.Max(
+                    originalBitmap.Width,
+                    originalBitmap.Height
+                );
+
+            var newWidth =
+                (int)(originalBitmap.Width * scale);
+
+            var newHeight =
+                (int)(originalBitmap.Height * scale);
+
+            resizedBitmap = originalBitmap.Resize(
+                new SKImageInfo(newWidth, newHeight),
+                new SKSamplingOptions(SKCubicResampler.Mitchell)
+            ) ?? throw new InvalidOperationException(
+                    "No se ha podido redimensionar la imagen."
+                );
         }
 
-        var outputStream = new MemoryStream();
+        using var image =
+            SKImage.FromBitmap(resizedBitmap);
+
+        SKEncodedImageFormat format;
+        int quality;
 
         switch (contentType)
         {
             case "image/jpeg":
-                await image.SaveAsync(
-                    outputStream,
-                    new JpegEncoder { Quality = JpegQuality }
-                );
+                format = SKEncodedImageFormat.Jpeg;
+                quality = JpegQuality;
                 break;
 
             case "image/webp":
-                await image.SaveAsync(
-                    outputStream,
-                    new WebpEncoder { Quality = WebpQuality }
-                );
+                format = SKEncodedImageFormat.Webp;
+                quality = WebpQuality;
                 break;
 
             case "image/png":
                 /*
-                 * PNG es sin pérdida; no aplica "calidad"
-                 * como JPEG/WEBP. Solo aprovechamos el
-                 * redimensionado si hizo falta.
+                 * PNG es sin pérdida; el parámetro de
+                 * calidad se ignora para este formato,
+                 * pero igualmente aprovechamos el resize.
                  */
-                await image.SaveAsync(
-                    outputStream,
-                    new PngEncoder()
-                );
+                format = SKEncodedImageFormat.Png;
+                quality = 100;
                 break;
 
             default:
@@ -413,7 +428,26 @@ public class ImageController : ControllerBase
                 );
         }
 
+        using var encodedData =
+            image.Encode(format, quality);
+
+        var outputStream = new MemoryStream();
+
+        encodedData.SaveTo(outputStream);
+
         outputStream.Position = 0;
+
+        /*
+         * Si redimensionamos, liberamos el bitmap
+         * intermedio (el original se libera con el
+         * using de arriba).
+         */
+        if (!ReferenceEquals(
+            resizedBitmap,
+            originalBitmap))
+        {
+            resizedBitmap.Dispose();
+        }
 
         return outputStream;
     }
