@@ -3,6 +3,11 @@ using CeleoxApi.Models;
 using CeleoxApi.Services;
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Formats.Webp;
+using SixLabors.ImageSharp.Formats.Png;
 
 namespace CeleoxApi.Controllers;
 
@@ -10,6 +15,10 @@ namespace CeleoxApi.Controllers;
 [Route("api/images")]
 public class ImageController : ControllerBase
 {
+    private const int MaxDimension = 1920;
+    private const int JpegQuality = 80;
+    private const int WebpQuality = 80;
+
     private readonly MongoDbContext _mongoDbContext;
     private readonly BackblazeService _backblazeService;
 
@@ -129,18 +138,24 @@ public class ImageController : ControllerBase
 
 
         /*
-         * Subimos el archivo a Backblaze B2.
+         * Optimizamos la imagen (resize + recompresión)
+         * antes de subirla.
          */
-        await using var stream =
+        await using var originalStream =
             file.OpenReadStream();
 
+        using var optimizedStream =
+            await OptimizeImageAsync(
+                originalStream,
+                contentType
+            );
 
+        //Subimos la imagen
         await _backblazeService.UploadAsync(
-            stream,
+            optimizedStream,
             objectKey,
             contentType
         );
-
 
         /*
          * Creamos la referencia de la imagen.
@@ -151,7 +166,6 @@ public class ImageController : ControllerBase
             ImageKey = objectKey,
             FileName = originalFileName
         };
-
 
         /*
          * Añadimos la imagen al array Images
@@ -331,5 +345,76 @@ public class ImageController : ControllerBase
 
 
         return NoContent();
+    }
+
+    /*
+    * Redimensiona si excede MaxDimension y
+    * recomprime con la calidad objetivo.
+    *
+    * Devuelve un nuevo stream ya optimizado,
+    * listo para subir a B2.
+    */
+    private async Task<MemoryStream> OptimizeImageAsync(
+        Stream inputStream,
+        string contentType)
+    {
+        using var image =
+            await Image.LoadAsync(inputStream);
+
+        /*
+         * Redimensionamos solo si supera el máximo,
+         * nunca ampliamos imágenes pequeñas.
+         */
+        if (image.Width > MaxDimension ||
+            image.Height > MaxDimension)
+        {
+            image.Mutate(x => x.Resize(
+                new ResizeOptions
+                {
+                    Mode = ResizeMode.Max,
+                    Size = new Size(MaxDimension, MaxDimension)
+                }
+            ));
+        }
+
+        var outputStream = new MemoryStream();
+
+        switch (contentType)
+        {
+            case "image/jpeg":
+                await image.SaveAsync(
+                    outputStream,
+                    new JpegEncoder { Quality = JpegQuality }
+                );
+                break;
+
+            case "image/webp":
+                await image.SaveAsync(
+                    outputStream,
+                    new WebpEncoder { Quality = WebpQuality }
+                );
+                break;
+
+            case "image/png":
+                /*
+                 * PNG es sin pérdida; no aplica "calidad"
+                 * como JPEG/WEBP. Solo aprovechamos el
+                 * redimensionado si hizo falta.
+                 */
+                await image.SaveAsync(
+                    outputStream,
+                    new PngEncoder()
+                );
+                break;
+
+            default:
+                throw new NotSupportedException(
+                    $"Formato no soportado: {contentType}"
+                );
+        }
+
+        outputStream.Position = 0;
+
+        return outputStream;
     }
 }

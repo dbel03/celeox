@@ -58,15 +58,35 @@ public class BackblazeService
         return _s3.GetPreSignedURL(request);
     }
 
-    public async Task DeleteAsync(
-        string objectKey)
+    public async Task DeleteAsync(string objectKey)
     {
-        var request = new DeleteObjectRequest
-        {
-            BucketName = _settings.BucketName,
-            Key = objectKey
-        };
+        var versionsResponse = await _s3.ListVersionsAsync(
+            new ListVersionsRequest
+            {
+                BucketName = _settings.BucketName,
+                Prefix = objectKey
+            }
+        );
 
-        await _s3.DeleteObjectAsync(request);
+        /*
+         * Filtramos solo las versiones que coinciden
+         * exactamente con la key (el Prefix puede
+         * devolver coincidencias parciales).
+         */
+        var versionsToDelete = versionsResponse.Versions
+            .Where(v => v.Key == objectKey)
+            .ToList();
+
+        foreach (var version in versionsToDelete)
+        {
+            await _s3.DeleteObjectAsync(
+                new DeleteObjectRequest
+                {
+                    BucketName = _settings.BucketName,
+                    Key = objectKey,
+                    VersionId = version.VersionId
+                }
+            );
+        }
     }
 }
