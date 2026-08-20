@@ -4,6 +4,7 @@ using CeleoxApi.Services;
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
 using SkiaSharp;
+using LibHeifSharp;
 
 namespace CeleoxApi.Controllers;
 
@@ -39,7 +40,7 @@ public class ImageController : ControllerBase
      * No elimina las imágenes anteriores.
      */
     [HttpPost("{featureId}")]
-    [RequestSizeLimit(10 * 1024 * 1024)]
+    [RequestSizeLimit(30 * 1024 * 1024)]
     public async Task<IActionResult> UploadImage(
         string featureId,
         IFormFile file)
@@ -72,28 +73,44 @@ public class ImageController : ControllerBase
          */
         var allowedTypes = new[]
         {
-            "image/jpeg",
-            "image/png",
-            "image/webp"
-        };
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/heic",
+        "image/heif"
+    };
 
 
-        var contentType =
+        var originalContentType =
             file.ContentType.ToLowerInvariant();
 
 
-        if (!allowedTypes.Contains(contentType))
+        if (!allowedTypes.Contains(originalContentType))
         {
             return BadRequest(
-                "Formato no permitido. Usa JPG, PNG o WEBP."
+                "Formato no permitido. Usa JPG, PNG, WEBP o HEIC."
             );
         }
 
 
         /*
-         * Determinamos la extensión.
+         * Las imágenes HEIC/HEIF siempre se convierten
+         * a JPEG antes de subirlas — no las mantenemos
+         * en su formato original.
          */
-        var extension = contentType switch
+        var isHeif =
+            originalContentType == "image/heic" ||
+            originalContentType == "image/heif";
+
+        var outputContentType =
+            isHeif ? "image/jpeg" : originalContentType;
+
+
+        /*
+         * Determinamos la extensión según el
+         * formato de SALIDA, no el original.
+         */
+        var extension = outputContentType switch
         {
             "image/jpeg" => ".jpg",
             "image/png" => ".png",
@@ -135,7 +152,10 @@ public class ImageController : ControllerBase
 
         /*
          * Optimizamos la imagen (resize + recompresión)
-         * antes de subirla.
+         * antes de subirla. El decode usa el tipo
+         * ORIGINAL (para saber si hay que pasar por
+         * DecodeHeifToBitmap), el encode usa el
+         * tipo de SALIDA.
          */
         await using var originalStream =
             file.OpenReadStream();
@@ -143,14 +163,15 @@ public class ImageController : ControllerBase
         using var optimizedStream =
             await OptimizeImageAsync(
                 originalStream,
-                contentType
+                originalContentType,
+                outputContentType
             );
 
         //Subimos la imagen
         await _backblazeService.UploadAsync(
             optimizedStream,
             objectKey,
-            contentType
+            outputContentType
         );
 
         /*
@@ -203,7 +224,6 @@ public class ImageController : ControllerBase
             fileName = image.FileName
         });
     }
-
 
     /*
      * ============================================
@@ -352,24 +372,22 @@ public class ImageController : ControllerBase
      */
     private async Task<MemoryStream> OptimizeImageAsync(
         Stream inputStream,
-        string contentType)
+        string originalContentType,
+        string outputContentType)
     {
-        using var originalBitmap =
-            SKBitmap.Decode(inputStream);
+        var isHeif =
+            originalContentType == "image/heic" ||
+            originalContentType == "image/heif";
 
-        if (originalBitmap == null)
-        {
-            throw new InvalidOperationException(
-                "No se ha podido decodificar la imagen."
-            );
-        }
+        using var originalBitmap = isHeif
+            ? DecodeHeifToBitmap(inputStream)
+            : SKBitmap.Decode(inputStream)
+                ?? throw new InvalidOperationException(
+                    "No se ha podido decodificar la imagen."
+                );
 
         SKBitmap resizedBitmap = originalBitmap;
 
-        /*
-         * Redimensionamos solo si supera el máximo,
-         * nunca ampliamos imágenes pequeñas.
-         */
         if (originalBitmap.Width > MaxDimension ||
             originalBitmap.Height > MaxDimension)
         {
@@ -400,7 +418,7 @@ public class ImageController : ControllerBase
         SKEncodedImageFormat format;
         int quality;
 
-        switch (contentType)
+        switch (outputContentType)
         {
             case "image/jpeg":
                 format = SKEncodedImageFormat.Jpeg;
@@ -413,18 +431,13 @@ public class ImageController : ControllerBase
                 break;
 
             case "image/png":
-                /*
-                 * PNG es sin pérdida; el parámetro de
-                 * calidad se ignora para este formato,
-                 * pero igualmente aprovechamos el resize.
-                 */
                 format = SKEncodedImageFormat.Png;
                 quality = 100;
                 break;
 
             default:
                 throw new NotSupportedException(
-                    $"Formato no soportado: {contentType}"
+                    $"Formato no soportado: {outputContentType}"
                 );
         }
 
@@ -437,11 +450,6 @@ public class ImageController : ControllerBase
 
         outputStream.Position = 0;
 
-        /*
-         * Si redimensionamos, liberamos el bitmap
-         * intermedio (el original se libera con el
-         * using de arriba).
-         */
         if (!ReferenceEquals(
             resizedBitmap,
             originalBitmap))
@@ -450,5 +458,56 @@ public class ImageController : ControllerBase
         }
 
         return outputStream;
+    }
+
+    private SKBitmap DecodeHeifToBitmap(Stream inputStream)
+    {
+        using var memoryStream = new MemoryStream();
+        inputStream.CopyTo(memoryStream);
+
+        using var heifContext =
+            new HeifContext(memoryStream.ToArray());
+
+        using var primaryImageHandle =
+            heifContext.GetPrimaryImageHandle();
+
+        using var heifImage =
+            primaryImageHandle.Decode(
+                HeifColorspace.Rgb,
+                HeifChroma.InterleavedRgba32
+            );
+
+        var width = heifImage.Width;
+        var height = heifImage.Height;
+
+        var planeData =
+            heifImage.GetPlane(HeifChannel.Interleaved);
+
+        var bitmap = new SKBitmap(
+            new SKImageInfo(
+                width,
+                height,
+                SKColorType.Rgba8888,
+                SKAlphaType.Unpremul
+            )
+        );
+
+        unsafe
+        {
+            byte* srcPtr = (byte*)planeData.Scan0;
+            byte* dstPtr = (byte*)bitmap.GetPixels();
+
+            for (int y = 0; y < height; y++)
+            {
+                Buffer.MemoryCopy(
+                    srcPtr + y * planeData.Stride,
+                    dstPtr + y * bitmap.RowBytes,
+                    bitmap.RowBytes,
+                    Math.Min(planeData.Stride, bitmap.RowBytes)
+                );
+            }
+        }
+
+        return bitmap;
     }
 }

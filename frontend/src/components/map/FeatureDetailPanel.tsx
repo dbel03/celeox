@@ -249,13 +249,15 @@ function FeatureDetailPanel({
             'image/jpeg',
             'image/png',
             'image/webp',
+            'image/heic',
+            'image/heif',
         ]
 
 
         if (!allowedTypes.includes(file.type)) {
 
             setError(
-                'Formato no permitido. Usa JPG, PNG o WEBP.'
+                'Formato no permitido. Usa JPG, PNG, WEBP o HEIC.'
             )
 
             event.target.value = ''
@@ -269,13 +271,13 @@ function FeatureDetailPanel({
          * El backend permite hasta 10 MB.
          */
         const maxSize =
-            10 * 1024 * 1024
+            30 * 1024 * 1024
 
 
         if (file.size > maxSize) {
 
             setError(
-                'La imagen no puede superar los 10 MB.'
+                'La imagen no puede superar los 30 MB.'
             )
 
             event.target.value = ''
@@ -882,16 +884,17 @@ function FeatureDetailPanel({
                     ref={fileInputRef}
                     type="file"
                     accept="
-                        image/jpeg,
-                        image/png,
-                        image/webp
-                    "
+                    image/jpeg,
+                    image/png,
+                    image/webp,
+                    image/heic,
+                    image/heif
+                "
                     className="hidden"
                     onChange={handleFileChange}
                 />
 
             </div>
-
 
             {/* ======================================
                 CONTENIDO
