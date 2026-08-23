@@ -12,7 +12,7 @@ function Home() {
 
 
   return (
-    <main className="flex min-h-screen flex-col bg-slate-50">
+    <main className="flex min-h-dvh flex-col bg-slate-50">
 
       <Header />
 
