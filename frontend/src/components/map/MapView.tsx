@@ -1001,16 +1001,21 @@ function MapView() {
             ================================================= */}
 
             <div
-                className="
+                className={`
                     absolute
                     left-2.5
                     right-50
                     top-5
                     z-[1000]
-                    flex
                     items-center
                     gap-2
-                "
+
+                    ${
+                        isMobile && detailFeature
+                            ? 'hidden'
+                            : 'flex'
+                    }
+                `}
             >
 
                 {/* =================================================
@@ -1124,30 +1129,13 @@ function MapView() {
                                             type="button"
                                             onClick={() => {
 
-                                                /*
-                                                 * Indicamos que el
-                                                 * próximo cambio de
-                                                 * search viene de una
-                                                 * selección.
-                                                 */
-
                                                 searchSelectionRef.current =
                                                     true
-
-
-                                                /*
-                                                 * Cerramos resultados.
-                                                 */
 
                                                 setSearchActive(
                                                     false
                                                 )
 
-
-                                                /*
-                                                 * Añadimos el elemento
-                                                 * al mapa si no estaba.
-                                                 */
 
                                                 setFeatures(
                                                     (previous) => {
@@ -1178,22 +1166,15 @@ function MapView() {
                                                 )
 
 
-                                                /*
-                                                 * Marcamos el elemento
-                                                 * encontrado.
-                                                 */
-
                                                 setSelectedFeature(
                                                     feature
                                                 )
 
 
                                                 /*
-                                                 * IMPORTANTE:
-                                                 *
-                                                 * En móvil NO abrimos
-                                                 * automáticamente la
-                                                 * tarjeta.
+                                                 * En móvil no abrimos
+                                                 * automáticamente el
+                                                 * panel de detalle.
                                                  *
                                                  * En escritorio sí.
                                                  */
@@ -1213,19 +1194,10 @@ function MapView() {
                                                 }
 
 
-                                                /*
-                                                 * Ponemos el nombre
-                                                 * en el buscador.
-                                                 */
-
                                                 setSearch(
                                                     feature.name ?? ''
                                                 )
 
-
-                                                /*
-                                                 * Eliminamos resultados.
-                                                 */
 
                                                 setSearchResults(
                                                     []
