@@ -23,7 +23,8 @@ interface FeatureDetailPanelProps {
  * Ficha de detalle de un elemento del mapa.
  *
  * - Móvil: bottom sheet, ocupa parte inferior de la pantalla.
- * - Escritorio: tarjeta flotante centrada verticalmente a la derecha.
+ * - Escritorio: tarjeta flotante centrada verticalmente a la derecha,
+ *   separada del navbar (que ocupa su propia columna en right-4).
  *
  * Las imágenes se almacenan en Backblaze B2 y se
  * obtienen mediante URLs temporales generadas por la API.
@@ -497,7 +498,7 @@ function FeatureDetailPanel({
                 absolute inset-x-0 bottom-0 z-[1100]
                 flex max-h-[65%] w-full flex-col
                 rounded-t-3xl bg-white shadow-2xl
-                sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-1/2
+                sm:inset-x-auto sm:bottom-auto sm:right-24 sm:top-1/2
                 sm:w-full sm:max-w-sm sm:-translate-y-1/2
                 sm:max-h-[85vh] sm:rounded-2xl sm:overflow-hidden
             "

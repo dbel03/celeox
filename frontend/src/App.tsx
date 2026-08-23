@@ -4,7 +4,7 @@ import {
   Route,
 } from 'react-router-dom'
 
-import Home from './components/layout/Home'
+import Home from './layout/Home'
 import MapPage from './pages/MapPage'
 
 

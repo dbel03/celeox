@@ -1,24 +1,24 @@
 import MapPreview from '../shared/MapPreview'
 
 
-const hikingCenters = [
+const ExcursionGroups = [
   {
     id: 1,
-    name: 'Centre Excursionista de Catalunya',
-    location: 'Barcelona',
-    members: 1240,
+    name: 'Los Exploradores del moco',
+    location: 'Excursión al Montcau',
+    members: 4,
   },
   {
     id: 2,
-    name: 'Centre Excursionista del Vallès',
-    location: 'Terrassa',
-    members: 680,
+    name: 'Los cracks',
+    location: 'Excursión a los pirineos',
+    members: 3,
   },
   {
     id: 3,
-    name: 'Club Excursionista Montserrat',
-    location: 'Montserrat',
-    members: 430,
+    name: 'Guapiabuelas',
+    location: 'Excursión a Vallparadis',
+    members: 5,
   },
 ]
 
@@ -37,33 +37,7 @@ function ExploreSection({
 
       <div className="mx-auto max-w-7xl">
 
-        {/* Cabecera */}
-
-        <div className="mb-10">
-
-          <span className="text-sm font-semibold uppercase tracking-widest text-emerald-600">
-            Explora
-          </span>
-
-          <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-            Descubre tu próxima aventura
-          </h2>
-
-          <p className="mt-3 max-w-2xl text-slate-600">
-            Encuentra nuevas rutas y conecta con otros amantes de la montaña.
-          </p>
-
-        </div>
-
-
-        {/* Mapa + centros */}
-
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
-
-
-          {/* ============================
-              MAPA
-          ============================ */}
 
           <div className="relative h-[500px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
 
@@ -73,11 +47,6 @@ function ExploreSection({
 
           </div>
 
-
-          {/* ============================
-              GRUPOS EXCURSIONISTAS
-          ============================ */}
-
           <div className="flex h-[500px] flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
 
             <div className="mb-5">
@@ -86,29 +55,20 @@ function ExploreSection({
                 Grupos de excursión
               </h3>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Descubre comunidades cerca de ti.
-              </p>
-
             </div>
-
-
-            {/* Lista */}
 
             <div className="flex-1 space-y-3 overflow-y-auto">
 
-              {hikingCenters.map((center) => (
+              {ExcursionGroups.map((center) => (
 
                 <button
                   key={center.id}
                   type="button"
                   className="group flex w-full items-center gap-4 rounded-2xl border border-slate-100 p-4 text-left transition hover:border-emerald-200 hover:bg-emerald-50"
                 >
-
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-xl">
                     🏔️
                   </div>
-
 
                   <div className="min-w-0 flex-1">
 
@@ -121,8 +81,7 @@ function ExploreSection({
                     </p>
 
                   </div>
-
-
+                  
                   <span className="text-slate-300 transition group-hover:text-emerald-500">
                     →
                   </span>
@@ -140,7 +99,7 @@ function ExploreSection({
               type="button"
               className="mt-5 w-full rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
-              Ver todos Grupos
+              Explorar Grupos
             </button>
 
           </div>
