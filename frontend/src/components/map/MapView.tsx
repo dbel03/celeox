@@ -1003,8 +1003,8 @@ function MapView() {
             <div
                 className={`
                     absolute
-                    left-2.5
-                    right-50
+                    left-4
+                    right-20
                     top-5
                     z-[1000]
                     items-center
