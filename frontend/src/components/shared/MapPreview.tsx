@@ -2,6 +2,7 @@ import {
   MapContainer,
   Marker,
   TileLayer,
+  ZoomControl,
 } from 'react-leaflet'
 
 import 'leaflet/dist/leaflet.css'
@@ -22,9 +23,6 @@ function MapPreview({
 
   /*
    * Centro inicial de Catalunya.
-   *
-   * Se usa mientras no tenemos la ubicación real,
-   * o si el usuario no da permiso.
    */
   const center: [number, number] = [
     41.65,
@@ -43,33 +41,31 @@ function MapPreview({
 
   /*
    * Ubicación del usuario.
-   *
-   * Solo una lectura puntual (watch: false),
-   * ya que es un preview y no necesita tiempo real.
    */
   const { location: userLocation } =
     useUserLocation({ watch: false })
 
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group relative block h-full w-full cursor-pointer overflow-hidden text-left"
-    >
+    <div className="group relative block h-full w-full overflow-hidden">
 
       <MapContainer
         center={userLocation ?? center}
         zoom={userLocation ? 11 : 8}
+
         minZoom={7}
         maxZoom={13}
-        scrollWheelZoom={false}
-        dragging={false}
-        doubleClickZoom={false}
+
+        scrollWheelZoom={true}
+        dragging={true}
+        doubleClickZoom={true}
         zoomControl={false}
+
         attributionControl={false}
+
         maxBounds={catalunyaBounds}
         maxBoundsViscosity={1}
+
         className="h-full w-full"
       >
 
@@ -77,6 +73,12 @@ function MapPreview({
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
+
+        {/* Controles de zoom */}
+        <ZoomControl position="topright" />
+
+
+        {/* Ubicación del usuario */}
         {userLocation && (
           <Marker
             position={userLocation}
@@ -88,27 +90,66 @@ function MapPreview({
 
 
       {/* Overlay */}
-      <div className="absolute inset-0 z-[500] bg-black/0 transition duration-300 group-hover:bg-black/10" />
+      <div
+        className="
+          pointer-events-none
+          absolute
+          inset-0
+          z-[500]
+          bg-black/0
+          transition
+          duration-300
+          group-hover:bg-black/10
+        "
+      />
 
 
-      {/* Botón visual */}
-      <div className="absolute bottom-5 left-1/2 z-[600] -translate-x-1/2">
+      {/* Botón explorar */}
+      <button
+        type="button"
+        onClick={onClick}
+        className="
+          absolute
+          bottom-5
+          left-1/2
+          z-[600]
+          -translate-x-1/2
 
-        <div className="flex items-center gap-2 rounded-full bg-slate-950/90 px-5 py-3 text-sm font-semibold text-white shadow-xl backdrop-blur-sm transition duration-300 group-hover:scale-105 group-hover:bg-emerald-600">
+          flex
+          items-center
+          gap-2
 
-          <span>
-            Explorar mapa
-          </span>
+          rounded-full
+          bg-slate-950/90
+          px-5
+          py-3
 
-          <span className="text-lg">
-            →
-          </span>
+          text-sm
+          font-semibold
+          text-white
 
-        </div>
+          shadow-xl
+          backdrop-blur-sm
 
-      </div>
+          transition
+          duration-300
 
-    </button>
+          hover:scale-105
+          hover:bg-emerald-600
+        "
+      >
+
+        <span>
+          Explorar mapa
+        </span>
+
+        <span className="text-lg">
+          →
+        </span>
+
+      </button>
+
+    </div>
   )
 }
 
