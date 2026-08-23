@@ -23,10 +23,10 @@ function Header({ onLogin }: HeaderProps) {
         <img
           src="/images/logo.png"
           alt="Celeox logo"
-          className="h-14 sm:h-24 w-auto"
+          className="h-18 sm:h-20 w-auto"
         />
 
-        <div className="absolute left-1/2 -translate-x-1/2 scale-200 origin-center">
+        <div className="absolute left-1/2 -translate-x-1/2 scale-150 origin-center">
           <Celeox />
         </div>
 

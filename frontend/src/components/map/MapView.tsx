@@ -516,6 +516,7 @@ function LocationController({
     )
 }
 
+
 /* =========================================================
    MAP VIEW
 ========================================================= */
@@ -565,6 +566,12 @@ function MapView() {
 
 
     const [
+        searchActive,
+        setSearchActive,
+    ] = useState(false)
+
+
+    const [
         selectedFeature,
         setSelectedFeature,
     ] = useState<
@@ -598,6 +605,62 @@ function MapView() {
     ] = useState<
         LeafletMap | null
     >(null)
+
+
+    /* =====================================================
+       DETECTAR MÓVIL
+    ===================================================== */
+
+    const [
+        isMobile,
+        setIsMobile,
+    ] = useState(false)
+
+
+    useEffect(() => {
+
+        const mediaQuery =
+            window.matchMedia(
+                '(max-width: 639px)'
+            )
+
+
+        const updateIsMobile = () => {
+
+            setIsMobile(
+                mediaQuery.matches
+            )
+
+        }
+
+
+        updateIsMobile()
+
+
+        mediaQuery.addEventListener(
+            'change',
+            updateIsMobile
+        )
+
+
+        return () => {
+
+            mediaQuery.removeEventListener(
+                'change',
+                updateIsMobile
+            )
+
+        }
+
+    }, [])
+
+
+    /* =====================================================
+       REF DEL BUSCADOR
+    ===================================================== */
+
+    const searchSelectionRef =
+        useRef(false)
 
 
     /* =====================================================
@@ -748,6 +811,21 @@ function MapView() {
 
     useEffect(() => {
 
+        if (
+            searchSelectionRef.current
+        ) {
+
+            searchSelectionRef.current =
+                false
+
+            setSearchResults([])
+
+            setSearching(false)
+
+            return
+        }
+
+
         const value =
             search.trim()
 
@@ -757,7 +835,10 @@ function MapView() {
         ) {
 
             setSearchResults([])
+
             setSearching(false)
+
+            setSearchActive(false)
 
             return
         }
@@ -768,11 +849,14 @@ function MapView() {
         ) {
 
             setSearchResults([])
+
             setSearching(false)
 
             return
         }
 
+
+        setSearchActive(true)
 
         setSearching(true)
 
@@ -834,9 +918,9 @@ function MapView() {
             [number, number],
             [number, number]
         ] = [
-            [40.5, 0.15],
-            [42.9, 3.35],
-        ]
+        [40.5, 0.15],
+        [42.9, 3.35],
+    ]
 
 
     /* =====================================================
@@ -948,8 +1032,15 @@ function MapView() {
                         value={search}
                         onChange={(event) => {
 
+                            searchSelectionRef.current =
+                                false
+
                             setSelectedFeature(
                                 null
+                            )
+
+                            setSearchActive(
+                                true
                             )
 
                             setSearch(
@@ -979,6 +1070,8 @@ function MapView() {
                     />
 
 
+                    {/* BUSCANDO */}
+
                     {searching && (
 
                         <div
@@ -997,7 +1090,12 @@ function MapView() {
                     )}
 
 
+                    {/* =================================================
+                        RESULTADOS
+                    ================================================= */}
+
                     {!searching &&
+                        searchActive &&
                         search.trim().length >= 2 &&
                         searchResults.length > 0 && (
 
@@ -1025,6 +1123,31 @@ function MapView() {
                                             }
                                             type="button"
                                             onClick={() => {
+
+                                                /*
+                                                 * Indicamos que el
+                                                 * próximo cambio de
+                                                 * search viene de una
+                                                 * selección.
+                                                 */
+
+                                                searchSelectionRef.current =
+                                                    true
+
+
+                                                /*
+                                                 * Cerramos resultados.
+                                                 */
+
+                                                setSearchActive(
+                                                    false
+                                                )
+
+
+                                                /*
+                                                 * Añadimos el elemento
+                                                 * al mapa si no estaba.
+                                                 */
 
                                                 setFeatures(
                                                     (previous) => {
@@ -1055,18 +1178,54 @@ function MapView() {
                                                 )
 
 
+                                                /*
+                                                 * Marcamos el elemento
+                                                 * encontrado.
+                                                 */
+
                                                 setSelectedFeature(
                                                     feature
                                                 )
 
-                                                setDetailFeature(
-                                                    feature
-                                                )
+
+                                                /*
+                                                 * IMPORTANTE:
+                                                 *
+                                                 * En móvil NO abrimos
+                                                 * automáticamente la
+                                                 * tarjeta.
+                                                 *
+                                                 * En escritorio sí.
+                                                 */
+
+                                                if (!isMobile) {
+
+                                                    setDetailFeature(
+                                                        feature
+                                                    )
+
+                                                } else {
+
+                                                    setDetailFeature(
+                                                        null
+                                                    )
+
+                                                }
+
+
+                                                /*
+                                                 * Ponemos el nombre
+                                                 * en el buscador.
+                                                 */
 
                                                 setSearch(
-                                                    feature.name ??
-                                                        ''
+                                                    feature.name ?? ''
                                                 )
+
+
+                                                /*
+                                                 * Eliminamos resultados.
+                                                 */
 
                                                 setSearchResults(
                                                     []
@@ -1126,10 +1285,14 @@ function MapView() {
                         )}
 
 
-                    {!searching &&
+                    {/* =================================================
+                        SIN RESULTADOS
+                    ================================================= */}
+
+                    {searchActive &&
+                        !searching &&
                         search.trim().length >= 2 &&
-                        searchResults.length === 0 &&
-                        !selectedFeature && (
+                        searchResults.length === 0 && (
 
                             <div
                                 className="
@@ -1400,6 +1563,7 @@ function MapView() {
                             userLocation
                         }
                     />
+
                 </div>
 
 

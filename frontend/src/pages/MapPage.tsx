@@ -4,17 +4,33 @@ import MapView from '../components/map/MapView'
 
 function MapPage() {
 
-  return (
-    <main className="relative h-screen w-screen overflow-hidden">
+    return (
 
-      <AppNavbar floating />
+        <main
+            className="
+                fixed
+                inset-0
+                overflow-hidden
+            "
+        >
 
-      <div className="h-full w-full">
-        <MapView />
-      </div>
+            <AppNavbar floating />
 
-    </main>
-  )
+            <div
+                className="
+                    h-full
+                    w-full
+                "
+            >
+
+                <MapView />
+
+            </div>
+
+        </main>
+
+    )
+
 }
 
 

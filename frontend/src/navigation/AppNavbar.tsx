@@ -68,7 +68,6 @@ function AppNavbar({
 
             {/* =====================================================
                 NAVEGACIÓN
-                MISMO DISEÑO EN DESKTOP Y MÓVIL
             ===================================================== */}
 
             <div
@@ -124,9 +123,10 @@ function AppNavbar({
                             w-4
                             transition-transform
                             duration-300
-                            ${navItemsOpen
-                                ? 'rotate-45'
-                                : 'rotate-0'
+                            ${
+                                navItemsOpen
+                                    ? 'rotate-45'
+                                    : 'rotate-0'
                             }
                         `}
                         fill="none"
@@ -197,19 +197,22 @@ function AppNavbar({
                             hover:border-emerald-300
                             hover:bg-emerald-500
 
-                            ${isHome
-                                ? 'border-black ring-2 ring-black/70'
-                                : 'border-emerald-400/50'
+                            ${
+                                isHome
+                                    ? 'border-black ring-2 ring-black/70'
+                                    : 'border-emerald-400/50'
                             }
 
-                            ${navItemsOpen
-                                ? 'translate-y-0 scale-100 opacity-100'
-                                : 'pointer-events-none -translate-y-14 scale-0 opacity-0'
+                            ${
+                                navItemsOpen
+                                    ? 'translate-y-0 scale-100 opacity-100'
+                                    : 'pointer-events-none -translate-y-14 scale-0 opacity-0'
                             }
                         `}
                     >
 
                         {isHome && (
+
                             <span
                                 className="
                                     absolute
@@ -223,7 +226,9 @@ function AppNavbar({
                                     bg-black
                                 "
                             />
+
                         )}
+
 
                         <svg
                             className="h-5 w-5"
@@ -296,19 +301,22 @@ function AppNavbar({
                             hover:border-emerald-300
                             hover:bg-emerald-500
 
-                            ${isMap
-                                ? 'border-black ring-2 ring-black/70'
-                                : 'border-emerald-400/50'
+                            ${
+                                isMap
+                                    ? 'border-black ring-2 ring-black/70'
+                                    : 'border-emerald-400/50'
                             }
 
-                            ${navItemsOpen
-                                ? 'translate-y-0 scale-100 opacity-100'
-                                : 'pointer-events-none -translate-y-28 scale-0 opacity-0'
+                            ${
+                                navItemsOpen
+                                    ? 'translate-y-0 scale-100 opacity-100'
+                                    : 'pointer-events-none -translate-y-28 scale-0 opacity-0'
                             }
                         `}
                     >
 
                         {isMap && (
+
                             <span
                                 className="
                                     absolute
@@ -322,7 +330,9 @@ function AppNavbar({
                                     bg-black
                                 "
                             />
+
                         )}
+
 
                         <svg
                             className="h-5 w-5"
