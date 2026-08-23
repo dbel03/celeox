@@ -534,17 +534,13 @@ function MapView() {
     const [
         features,
         setFeatures,
-    ] = useState<
-        MountainFeature[]
-    >([])
+    ] = useState<MountainFeature[]>([])
 
 
     const [
         searchResults,
         setSearchResults,
-    ] = useState<
-        MountainFeature[]
-    >([])
+    ] = useState<MountainFeature[]>([])
 
 
     const [
@@ -574,17 +570,13 @@ function MapView() {
     const [
         selectedFeature,
         setSelectedFeature,
-    ] = useState<
-        MountainFeature | null
-    >(null)
+    ] = useState<MountainFeature | null>(null)
 
 
     const [
         detailFeature,
         setDetailFeature,
-    ] = useState<
-        MountainFeature | null
-    >(null)
+    ] = useState<MountainFeature | null>(null)
 
 
     const [
@@ -602,9 +594,7 @@ function MapView() {
     const [
         mapInstance,
         setMapInstance,
-    ] = useState<
-        LeafletMap | null
-    >(null)
+    ] = useState<LeafletMap | null>(null)
 
 
     /* =====================================================
@@ -678,7 +668,9 @@ function MapView() {
        CARGAR ELEMENTOS
     ===================================================== */
 
-    const requestIdRef = useRef(0)
+    const requestIdRef =
+        useRef(0)
+
 
     const loadFeatures =
         useCallback(
@@ -819,7 +811,6 @@ function MapView() {
                 false
 
             setSearchResults([])
-
             setSearching(false)
 
             return
@@ -835,9 +826,7 @@ function MapView() {
         ) {
 
             setSearchResults([])
-
             setSearching(false)
-
             setSearchActive(false)
 
             return
@@ -849,7 +838,6 @@ function MapView() {
         ) {
 
             setSearchResults([])
-
             setSearching(false)
 
             return
@@ -857,7 +845,6 @@ function MapView() {
 
 
         setSearchActive(true)
-
         setSearching(true)
 
 
@@ -881,7 +868,6 @@ function MapView() {
                             )
 
                             setSearchResults([])
-
                         })
                         .finally(() => {
 
@@ -992,6 +978,7 @@ function MapView() {
                 relative
                 h-full
                 w-full
+                max-w-full
                 overflow-hidden
             "
         >
@@ -1063,7 +1050,10 @@ function MapView() {
                             bg-white
                             px-4
                             pr-10
-                            text-sm
+
+                            text-base
+                            sm:text-sm
+
                             text-gray-800
                             shadow-lg
                             outline-none
@@ -1170,14 +1160,6 @@ function MapView() {
                                                     feature
                                                 )
 
-
-                                                /*
-                                                 * En móvil no abrimos
-                                                 * automáticamente el
-                                                 * panel de detalle.
-                                                 *
-                                                 * En escritorio sí.
-                                                 */
 
                                                 if (!isMobile) {
 
@@ -1484,7 +1466,11 @@ function MapView() {
                 scrollWheelZoom={true}
                 maxBounds={catalunyaBounds}
                 maxBoundsViscosity={1.0}
-                className="h-full w-full"
+                className="
+                    h-full
+                    w-full
+                    max-w-full
+                "
             >
 
                 <SearchController

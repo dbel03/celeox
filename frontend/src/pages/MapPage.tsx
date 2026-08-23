@@ -5,7 +5,14 @@ import MapView from '../components/map/MapView'
 function MapPage() {
 
     return (
-        <main className="relative h-dvh w-full overflow-hidden">
+        <main
+            className="
+                fixed
+                inset-0
+                overflow-hidden
+                overscroll-none
+            "
+        >
 
             <AppNavbar floating />
 
