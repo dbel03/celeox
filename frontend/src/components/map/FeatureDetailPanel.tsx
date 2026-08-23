@@ -30,9 +30,7 @@ interface FeatureDetailPanelProps {
  */
 function FeatureDetailPanel({
     feature,
-    onClose,
-    onEdit,
-    onDelete,
+    onClose
 }: FeatureDetailPanelProps) {
 
     const fileInputRef =
