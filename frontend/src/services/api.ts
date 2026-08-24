@@ -1,4 +1,10 @@
 import type { MountainFeature } from '../types/mountain'
+import type {
+    RoutePoint,
+    MountainRoute,
+    CreateMountainRoute, UpdateMountainRoute
+} from '../types/route'
+
 
 export type { MountainFeature }
 
@@ -273,102 +279,6 @@ export async function deleteImage(
  * ============================================
  */
 
-
-/*
- * ============================================
- * OPCIONES DE RUTAS
- * ============================================
- */
-
-export const ROUTE_CRITICAL_SECTIONS = [
-    'Pista',
-    'Sendero/Corriol',
-    'Tartera',
-    'Roca vertical',
-    'Roca vertical aérea',
-] as const
-
-export type RouteCriticalSection =
-    typeof ROUTE_CRITICAL_SECTIONS[number]
-
-
-/*
- * Punto del trazado de una ruta.
- */
-
-export interface RoutePoint {
-    latitude: number
-    longitude: number
-}
-
-
-/*
- * Ruta completa devuelta por el backend.
- */
-
-export interface MountainRoute {
-    name: string
-
-    distanceKm: number
-
-    elevationGain: number
-
-    totalTimeMinutes: number
-
-    movingTimeMinutes: number
-
-    criticalSection: RouteCriticalSection
-
-    personalRecommendations?: string | null
-
-    track: RoutePoint[]
-}
-
-
-/*
- * Datos necesarios para crear una ruta.
- */
-
-export interface CreateMountainRoute {
-    name: string
-
-    distanceKm: number
-
-    elevationGain: number
-
-    totalTimeMinutes: number
-
-    movingTimeMinutes: number
-
-    criticalSection: RouteCriticalSection
-
-    personalRecommendations?: string | null
-
-    track: RoutePoint[]
-}
-
-
-/*
- * Datos necesarios para actualizar una ruta.
- */
-
-export interface UpdateMountainRoute {
-    name: string
-
-    distanceKm: number
-
-    elevationGain: number
-
-    totalTimeMinutes: number
-
-    movingTimeMinutes: number
-
-    criticalSection: RouteCriticalSection
-
-    personalRecommendations?: string | null
-
-    track: RoutePoint[]
-}
 
 
 /*
