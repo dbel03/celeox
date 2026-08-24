@@ -1,8 +1,11 @@
+import { useState } from 'react'
 import AppNavbar from '../navigation/AppNavbar'
 import MapView from '../components/map/MapView'
 
 
 function MapPage() {
+
+    const [navHidden, setNavHidden] = useState(false)
 
     return (
         <main
@@ -14,10 +17,10 @@ function MapPage() {
             "
         >
 
-            <AppNavbar floating />
+            <AppNavbar floating hidden={navHidden} />
 
             <div className="h-full w-full">
-                <MapView />
+                <MapView onDetailOpenChange={setNavHidden} />
             </div>
 
         </main>

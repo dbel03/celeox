@@ -63,6 +63,9 @@ interface MapLayer {
     attribution: string
 }
 
+interface MapViewProps {
+    onDetailOpenChange?: (open: boolean) => void
+}
 
 /* =========================================================
    CAPAS
@@ -148,10 +151,10 @@ const FeatureMarker = memo(
             ? selectedFeatureIcon
             : isDetailOpen
                 ? iconByType[
-                    feature.type as keyof typeof iconByType
+                feature.type as keyof typeof iconByType
                 ] ?? userLocationIcon
                 : smallIconByType[
-                    feature.type as keyof typeof smallIconByType
+                feature.type as keyof typeof smallIconByType
                 ] ?? userLocationIcon
 
 
@@ -303,8 +306,8 @@ function SearchController({
     feature,
 }: {
     feature:
-        | MountainFeature
-        | null
+    | MountainFeature
+    | null
 }) {
 
     const map = useMap()
@@ -431,8 +434,8 @@ function LocationController({
     location,
 }: {
     location:
-        | [number, number]
-        | null
+    | [number, number]
+    | null
 }) {
 
     const map = useMap()
@@ -521,7 +524,7 @@ function LocationController({
    MAP VIEW
 ========================================================= */
 
-function MapView() {
+function MapView({ onDetailOpenChange }: MapViewProps) {
 
     const {
         location: userLocation,
@@ -597,7 +600,7 @@ function MapView() {
     ] = useState<LeafletMap | null>(null)
 
 
-    /* =====================================================
+    /* =====================================================el 
        DETECTAR MÓVIL
     ===================================================== */
 
@@ -606,6 +609,9 @@ function MapView() {
         setIsMobile,
     ] = useState(false)
 
+    useEffect(() => {
+        onDetailOpenChange?.(isMobile && Boolean(detailFeature))
+    }, [isMobile, detailFeature, onDetailOpenChange])
 
     useEffect(() => {
 
@@ -904,9 +910,9 @@ function MapView() {
             [number, number],
             [number, number]
         ] = [
-        [40.5, 0.15],
-        [42.9, 3.35],
-    ]
+            [40.5, 0.15],
+            [42.9, 3.35],
+        ]
 
 
     /* =====================================================
@@ -987,23 +993,7 @@ function MapView() {
                 CONTROLES SUPERIORES
             ================================================= */}
 
-            <div
-                className={`
-                    absolute
-                    left-4
-                    right-20
-                    top-5
-                    z-[1000]
-                    items-center
-                    gap-2
-
-                    ${
-                        isMobile && detailFeature
-                            ? 'hidden'
-                            : 'flex'
-                    }
-                `}
-            >
+            <div className="absolute left-4 right-20 top-5 z-[1000] flex items-center gap-2">
 
                 {/* =================================================
                     BUSCADOR
@@ -1392,11 +1382,10 @@ function MapView() {
                                             text-sm
                                             transition
 
-                                            ${
-                                                selectedLayer ===
+                                            ${selectedLayer ===
                                                 layer.id
-                                                    ? 'bg-emerald-50 font-semibold text-emerald-700'
-                                                    : 'text-gray-700 hover:bg-gray-50'
+                                                ? 'bg-emerald-50 font-semibold text-emerald-700'
+                                                : 'text-gray-700 hover:bg-gray-50'
                                             }
                                         `}
                                     >
@@ -1411,11 +1400,11 @@ function MapView() {
                                         {selectedLayer ===
                                             layer.id && (
 
-                                            <span>
-                                                ✓
-                                            </span>
+                                                <span>
+                                                    ✓
+                                                </span>
 
-                                        )}
+                                            )}
 
                                     </button>
 

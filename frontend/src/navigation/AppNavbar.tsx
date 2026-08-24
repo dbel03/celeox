@@ -4,11 +4,13 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 interface AppNavbarProps {
     floating?: boolean
+    hidden?: boolean
 }
 
 
 function AppNavbar({
     floating = false,
+    hidden =false 
 }: AppNavbarProps) {
 
     const navigate = useNavigate()
@@ -30,7 +32,10 @@ function AppNavbar({
                 pointer-events-none
                 bg-transparent
                 text-white
+                transition-opacity
+                duration-200
                 ${floating ? 'absolute' : 'relative'}
+                ${hidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}
             `}
         >
 
