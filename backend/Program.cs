@@ -9,6 +9,8 @@ builder.Services.AddControllers();
 
 builder.Services.AddSingleton<OsmService>();
 
+builder.Services.AddSingleton<MountainRouteService>();
+
 // OpenAPI
 builder.Services.AddOpenApi();
 

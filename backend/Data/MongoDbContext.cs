@@ -23,6 +23,9 @@ public class MongoDbContext
     public IMongoCollection<MountainFeature> MountainFeatures =>
         _database.GetCollection<MountainFeature>("mountain_features");
 
+    public IMongoCollection<MountainRoute> MountainRoutes =>
+        _database.GetCollection<MountainRoute>("mountain_routes");
+
     public async Task UpsertMountainFeaturesAsync(
         IEnumerable<MountainFeature> features)
     {
