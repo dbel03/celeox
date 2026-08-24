@@ -590,7 +590,6 @@ function MapView({ onDetailOpenChange }: MapViewProps) {
         setDetailFeature,
     ] = useState<MountainFeature | null>(null)
 
-
     const [
         selectedLayer,
         setSelectedLayer,
@@ -1644,7 +1643,6 @@ function MapView({ onDetailOpenChange }: MapViewProps) {
                         currentLayer.url
                     }
                 />
-
 
                 <MapEvents
                     onBoundsChange={

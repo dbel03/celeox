@@ -6,6 +6,7 @@ import {
 
 import Home from './layout/Home'
 import MapPage from './pages/MapPage'
+import CreateRoutePage from './pages/CreateRoutePage'
 
 
 function App() {
@@ -23,6 +24,11 @@ function App() {
         <Route
           path="/map"
           element={<MapPage />}
+        />
+
+        <Route
+          path="/crear-ruta"
+          element={<CreateRoutePage />}
         />
 
       </Routes>

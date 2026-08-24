@@ -10,7 +10,7 @@ interface AppNavbarProps {
 
 function AppNavbar({
     floating = false,
-    hidden =false 
+    hidden = false
 }: AppNavbarProps) {
 
     const navigate = useNavigate()
@@ -18,9 +18,9 @@ function AppNavbar({
 
     const isHome = location.pathname === '/'
     const isMap = location.pathname === '/map'
+    const isCreateRoute = location.pathname === '/crear-ruta'
 
     const [navItemsOpen, setNavItemsOpen] = useState(true)
-
 
     return (
         <nav
@@ -128,10 +128,9 @@ function AppNavbar({
                             w-4
                             transition-transform
                             duration-300
-                            ${
-                                navItemsOpen
-                                    ? 'rotate-45'
-                                    : 'rotate-0'
+                            ${navItemsOpen
+                                ? 'rotate-45'
+                                : 'rotate-0'
                             }
                         `}
                         fill="none"
@@ -202,16 +201,14 @@ function AppNavbar({
                             hover:border-emerald-300
                             hover:bg-emerald-500
 
-                            ${
-                                isHome
-                                    ? 'border-black ring-2 ring-black/70'
-                                    : 'border-emerald-400/50'
+                            ${isHome
+                                ? 'border-black ring-2 ring-black/70'
+                                : 'border-emerald-400/50'
                             }
 
-                            ${
-                                navItemsOpen
-                                    ? 'translate-y-0 scale-100 opacity-100'
-                                    : 'pointer-events-none -translate-y-14 scale-0 opacity-0'
+                            ${navItemsOpen
+                                ? 'translate-y-0 scale-100 opacity-100'
+                                : 'pointer-events-none -translate-y-14 scale-0 opacity-0'
                             }
                         `}
                     >
@@ -306,16 +303,14 @@ function AppNavbar({
                             hover:border-emerald-300
                             hover:bg-emerald-500
 
-                            ${
-                                isMap
-                                    ? 'border-black ring-2 ring-black/70'
-                                    : 'border-emerald-400/50'
+                            ${isMap
+                                ? 'border-black ring-2 ring-black/70'
+                                : 'border-emerald-400/50'
                             }
 
-                            ${
-                                navItemsOpen
-                                    ? 'translate-y-0 scale-100 opacity-100'
-                                    : 'pointer-events-none -translate-y-28 scale-0 opacity-0'
+                            ${navItemsOpen
+                                ? 'translate-y-0 scale-100 opacity-100'
+                                : 'pointer-events-none -translate-y-28 scale-0 opacity-0'
                             }
                         `}
                     >
@@ -364,6 +359,89 @@ function AppNavbar({
                                 "
                             />
 
+                        </svg>
+
+                    </button>
+
+                    {/* =================================================
+                        CREAR RUTA
+                    ================================================= */}
+
+                    <button
+                        type="button"
+                        onClick={() => navigate('/crear-ruta')}
+                        aria-label="Crear ruta"
+                        aria-current={
+                            isCreateRoute
+                                ? 'page'
+                                : undefined
+                        }
+                        style={{
+                            transitionDelay:
+                                navItemsOpen
+                                    ? '180ms'
+                                    : '0ms',
+                        }}
+                        className={`
+                            relative
+                            flex
+                            h-11
+                            w-11
+                            origin-top
+                            items-center
+                            justify-center
+                            rounded-full
+                            border
+                            bg-emerald-600
+                            text-white
+                            shadow-lg
+                            transition-all
+                            duration-300
+                            ease-in-out
+                            hover:border-emerald-300
+                            hover:bg-emerald-500
+
+                            ${isCreateRoute
+                                ? 'border-black ring-2 ring-black/70'
+                                : 'border-emerald-400/50'
+                            }
+
+                            ${navItemsOpen
+                                ? 'translate-y-0 scale-100 opacity-100'
+                                : 'pointer-events-none -translate-y-40 scale-0 opacity-0'
+                            }
+                        `}
+                    >
+                        {isCreateRoute && (
+
+                            <span
+                                className="
+                                    absolute
+                                    -right-0.5
+                                    -top-0.5
+                                    h-2.5
+                                    w-2.5
+                                    rounded-full
+                                    border-2
+                                    border-white
+                                    bg-black
+                                "
+                            />
+
+                        )}
+
+                        <svg
+                            className="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 5v14M5 12h14"
+                            />
                         </svg>
 
                     </button>
