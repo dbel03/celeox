@@ -532,9 +532,7 @@ function FeatureDetailPanel({
             )
 
             setError(
-                err instanceof Error
-                    ? err.message
-                    : 'No se pudo eliminar la imagen.'
+                'No se pudo eliminar la imagen. Inténtalo de nuevo.'
             )
 
         } finally {

@@ -67,15 +67,15 @@ public class BackblazeService
                 Prefix = objectKey
             }
         );
-
-        /*
-         * Filtramos solo las versiones que coinciden
-         * exactamente con la key (el Prefix puede
-         * devolver coincidencias parciales).
-         */
-        var versionsToDelete = versionsResponse.Versions
+        
+        var versionsToDelete = versionsResponse.Versions?
             .Where(v => v.Key == objectKey)
-            .ToList();
+            .ToList() ?? [];
+
+        if (versionsToDelete.Count == 0)
+        {
+            return;
+        }
 
         foreach (var version in versionsToDelete)
         {
