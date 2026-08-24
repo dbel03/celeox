@@ -1,33 +1,33 @@
-using CeleoxApi.Data;
 using CeleoxApi.Models;
 using CeleoxApi.Services;
 using Microsoft.AspNetCore.Mvc;
-using MongoDB.Driver;
 
 namespace CeleoxApi.Controllers;
 
 [ApiController]
 [Route("api/osm")]
-public class OsmController : ControllerBase
+public class OsmController(
+    OsmService osmService,
+    MountainFeatureService featureService) : ControllerBase
 {
-    private readonly OsmService _osmService;
-    private readonly MongoDbContext _mongoDbContext;
+    private readonly OsmService _osmService = osmService;
+    private readonly MountainFeatureService _featureService = featureService;
 
-    public OsmController(
-        OsmService osmService,
-        MongoDbContext mongoDbContext)
-    {
-        _osmService = osmService;
-        _mongoDbContext = mongoDbContext;
-    }
 
     /*
-     * Tipos de feature soportados, delegado a OsmService
-     * (que es quien conoce el mapeo real tag -> type).
-     * Evita mantener dos listas duplicadas y desincronizadas.
+     * =========================================================
+     * TIPOS SOPORTADOS
+     * =========================================================
      */
+
     private IEnumerable<string> SupportedTypes =>
         _osmService.GetSupportedTypes();
+
+    /*
+     * =========================================================
+     * INFORMACIÓN OSM
+     * =========================================================
+     */
 
     [HttpGet("info")]
     public IActionResult GetInfo()
@@ -37,6 +37,13 @@ public class OsmController : ControllerBase
         return Ok(info);
     }
 
+
+    /*
+     * =========================================================
+     * INFORMACIÓN MONTAÑA
+     * =========================================================
+     */
+
     [HttpGet("mountain")]
     public IActionResult GetMountainInfo()
     {
@@ -45,10 +52,13 @@ public class OsmController : ControllerBase
         return Ok(info);
     }
 
+
     /*
-     * Importa todos los tipos soportados desde el extracto OSM
-     * y los guarda (upsert) en Mongo.
+     * =========================================================
+     * IMPORTAR FEATURES OSM -> MONGO
+     * =========================================================
      */
+
     [HttpPost("import")]
     public async Task<IActionResult> ImportFeatures()
     {
@@ -56,9 +66,12 @@ public class OsmController : ControllerBase
 
         foreach (var type in SupportedTypes)
         {
-            var features = _osmService.GetFeaturesByType(type);
+            var features =
+                _osmService.GetFeaturesByType(type);
 
-            await _mongoDbContext.UpsertMountainFeaturesAsync(features);
+            await _featureService.UpsertMountainFeaturesAsync(
+                features
+            );
 
             counts[type] = features.Count;
         }
@@ -70,10 +83,13 @@ public class OsmController : ControllerBase
         });
     }
 
+
     /*
-     * Devuelve features de un tipo concreto dentro de un área.
-     * type es obligatorio: spring, peak, cave, hospital, etc.
+     * =========================================================
+     * FEATURES POR TIPO Y BOUNDING BOX
+     * =========================================================
      */
+
     [HttpGet("features")]
     public async Task<IActionResult> GetFeatures(
         [FromQuery] string type,
@@ -82,66 +98,62 @@ public class OsmController : ControllerBase
         [FromQuery] double minLon,
         [FromQuery] double maxLon)
     {
-        if (string.IsNullOrWhiteSpace(type) || !SupportedTypes.Contains(type))
+        if (
+            string.IsNullOrWhiteSpace(type) ||
+            !SupportedTypes.Contains(type)
+        )
         {
             return BadRequest(
-                $"Tipo no soportado. Tipos válidos: {string.Join(", ", SupportedTypes)}"
+                $"Tipo no soportado. Tipos válidos: " +
+                $"{string.Join(", ", SupportedTypes)}"
             );
         }
 
-        var filter =
-            Builders<MountainFeature>.Filter.Eq(x => x.Type, type)
-            &
-            Builders<MountainFeature>.Filter.Gte(x => x.Latitude, minLat)
-            &
-            Builders<MountainFeature>.Filter.Lte(x => x.Latitude, maxLat)
-            &
-            Builders<MountainFeature>.Filter.Gte(x => x.Longitude, minLon)
-            &
-            Builders<MountainFeature>.Filter.Lte(x => x.Longitude, maxLon);
-
-        var features = await _mongoDbContext.MountainFeatures
-            .Find(filter)
-            .ToListAsync();
+        var features =
+            await _featureService.GetFeaturesInBoundsAsync(
+                type,
+                minLat,
+                maxLat,
+                minLon,
+                maxLon
+            );
 
         return Ok(features);
     }
 
+
     /*
-     * Busca features de un tipo concreto (o de todos, si se omite type)
-     * por nombre.
+     * =========================================================
+     * BUSCAR FEATURES POR NOMBRE
+     * =========================================================
      */
+
     [HttpGet("features/search")]
     public async Task<IActionResult> SearchFeatures(
         [FromQuery] string name,
         [FromQuery] string? type = null)
     {
         if (string.IsNullOrWhiteSpace(name))
-            return Ok(new List<MountainFeature>());
-
-        var nameFilter = Builders<MountainFeature>.Filter.Regex(
-            x => x.Name,
-            new MongoDB.Bson.BsonRegularExpression(name, "i")
-        );
-
-        var filter = nameFilter;
-
-        if (!string.IsNullOrWhiteSpace(type))
         {
-            if (!SupportedTypes.Contains(type))
-            {
-                return BadRequest(
-                    $"Tipo no soportado. Tipos válidos: {string.Join(", ", SupportedTypes)}"
-                );
-            }
-
-            filter &= Builders<MountainFeature>.Filter.Eq(x => x.Type, type);
+            return Ok(new List<MountainFeature>());
         }
 
-        var features = await _mongoDbContext.MountainFeatures
-            .Find(filter)
-            .Limit(20)
-            .ToListAsync();
+        if (
+            !string.IsNullOrWhiteSpace(type) &&
+            !SupportedTypes.Contains(type)
+        )
+        {
+            return BadRequest(
+                $"Tipo no soportado. Tipos válidos: " +
+                $"{string.Join(", ", SupportedTypes)}"
+            );
+        }
+
+        var features =
+            await _featureService.SearchFeaturesAsync(
+                name,
+                type
+            );
 
         return Ok(features);
     }

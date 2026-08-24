@@ -28,6 +28,8 @@ builder.Services.Configure<BackblazeSettings>(
 //Registro del servicio
 builder.Services.AddSingleton<BackblazeService>();
 
+builder.Services.AddScoped<MountainFeatureService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

@@ -9,7 +9,8 @@ public class MongoDbContext
 {
     private readonly IMongoDatabase _database;
 
-    public MongoDbContext(IOptions<MongoDbSettings> settings)
+    public MongoDbContext(
+        IOptions<MongoDbSettings> settings)
     {
         var client = new MongoClient(
             settings.Value.ConnectionString
@@ -21,27 +22,12 @@ public class MongoDbContext
     }
 
     public IMongoCollection<MountainFeature> MountainFeatures =>
-        _database.GetCollection<MountainFeature>("mountain_features");
-
-    public IMongoCollection<MountainRoute> MountainRoutes =>
-        _database.GetCollection<MountainRoute>("mountain_routes");
-
-    public async Task UpsertMountainFeaturesAsync(
-        IEnumerable<MountainFeature> features)
-    {
-        var operations = features.Select(feature =>
-            new ReplaceOneModel<MountainFeature>(
-                Builders<MountainFeature>.Filter.Eq(
-                    x => x.Id,
-                    feature.Id
-                ),
-                feature
-            )
-            {
-                IsUpsert = true
-            }
+        _database.GetCollection<MountainFeature>(
+            "mountain_features"
         );
 
-        await MountainFeatures.BulkWriteAsync(operations);
-    }
+    public IMongoCollection<MountainRoute> MountainRoutes =>
+        _database.GetCollection<MountainRoute>(
+            "mountain_routes"
+        );
 }

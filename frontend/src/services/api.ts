@@ -12,11 +12,6 @@ const API_URL = '/api'
  * ============================================
  */
 
-/*
- * Lista de tipos de elemento que existen en el mapa.
- * Debe coincidir con SupportedTypes / TypeTagMap
- * (OsmController / OsmService).
- */
 export const FEATURE_TYPES = [
     'spring',
     'peak',
@@ -27,11 +22,6 @@ export const FEATURE_TYPES = [
     'hospital',
 ] as const
 
-
-/*
- * FeatureType es un tipo "unión de literales" derivado
- * de FEATURE_TYPES.
- */
 export type FeatureType =
     typeof FEATURE_TYPES[number]
 
@@ -95,10 +85,9 @@ export async function getFeatures(
 
 
 /*
- * Carga TODOS los tipos a la vez para un área,
- * lanzando una petición por tipo en paralelo
- * y devolviendo el resultado combinado.
+ * Carga TODOS los tipos a la vez para un área.
  */
+
 export async function getAllFeatures(
     minLat: number,
     maxLat: number,
@@ -124,10 +113,8 @@ export async function getAllFeatures(
 
 /*
  * Busca features por nombre.
- *
- * Si se indica type, limita la búsqueda
- * a ese tipo de feature.
  */
+
 export async function searchFeatures(
     name: string,
     type?: FeatureType
@@ -161,12 +148,6 @@ export async function searchFeatures(
  * ============================================
  */
 
-/*
- * Imagen de una MountainFeature.
- *
- * La URL es temporal porque el bucket de
- * Backblaze B2 es privado.
- */
 export interface MountainImage {
     id: string
     imageKey: string
@@ -174,14 +155,6 @@ export interface MountainImage {
     fileName: string
 }
 
-/*
- * Respuesta del backend al solicitar
- * todas las imágenes de una feature.
- *
- * GET /api/images/{id}
- *
- * El backend devuelve un array de imágenes.
- */
 export type GetImagesResponse =
     MountainImage[]
 
@@ -192,13 +165,6 @@ export type GetImagesResponse =
  * ============================================
  */
 
-/*
- * Obtiene todas las imágenes de una feature.
- *
- * GET /api/images/{id}
- *
- * Devuelve las URLs temporales de Backblaze.
- */
 export async function getImages(
     id: string
 ): Promise<MountainImage[]> {
@@ -209,13 +175,6 @@ export async function getImages(
 
     if (!response.ok) {
 
-        /*
-         * Si la feature no tiene imágenes,
-         * el backend puede devolver 404.
-         *
-         * Lo convertimos en un array vacío
-         * para simplificar el frontend.
-         */
         if (response.status === 404) {
             return []
         }
@@ -232,10 +191,6 @@ export async function getImages(
     const result =
         await response.json()
 
-    /*
-     * El backend debería devolver directamente
-     * un array.
-     */
     return result
 }
 
@@ -246,19 +201,6 @@ export async function getImages(
  * ============================================
  */
 
-/*
- * Sube una nueva imagen para una feature.
- *
- * POST /api/images/{id}
- *
- * El backend recibe multipart/form-data
- * con el campo "file".
- *
- * IMPORTANTE:
- *
- * Esta función NO elimina las imágenes anteriores.
- * Permite tener varias imágenes por feature.
- */
 export async function uploadImage(
     id: string,
     file: File
@@ -300,14 +242,6 @@ export async function uploadImage(
  * ============================================
  */
 
-/*
- * Elimina UNA imagen concreta.
- *
- * DELETE /api/images/{id}/{imageKey}
- *
- * El imageKey identifica el objeto concreto
- * dentro de Backblaze B2.
- */
 export async function deleteImage(
     id: string,
     imageKey: string
@@ -328,6 +262,325 @@ export async function deleteImage(
         throw new Error(
             errorText ||
             `Error eliminando la imagen: ${response.status}`
+        )
+    }
+}
+
+
+/*
+ * ============================================
+ * RUTAS
+ * ============================================
+ */
+
+
+/*
+ * ============================================
+ * OPCIONES DE RUTAS
+ * ============================================
+ */
+
+export const ROUTE_CRITICAL_SECTIONS = [
+    'Pista',
+    'Sendero/Corriol',
+    'Tartera',
+    'Roca vertical',
+    'Roca vertical aérea',
+] as const
+
+export type RouteCriticalSection =
+    typeof ROUTE_CRITICAL_SECTIONS[number]
+
+
+/*
+ * Punto del trazado de una ruta.
+ */
+
+export interface RoutePoint {
+    latitude: number
+    longitude: number
+}
+
+
+/*
+ * Ruta completa devuelta por el backend.
+ */
+
+export interface MountainRoute {
+    name: string
+
+    distanceKm: number
+
+    elevationGain: number
+
+    totalTimeMinutes: number
+
+    movingTimeMinutes: number
+
+    criticalSection: RouteCriticalSection
+
+    personalRecommendations?: string | null
+
+    track: RoutePoint[]
+}
+
+
+/*
+ * Datos necesarios para crear una ruta.
+ */
+
+export interface CreateMountainRoute {
+    name: string
+
+    distanceKm: number
+
+    elevationGain: number
+
+    totalTimeMinutes: number
+
+    movingTimeMinutes: number
+
+    criticalSection: RouteCriticalSection
+
+    personalRecommendations?: string | null
+
+    track: RoutePoint[]
+}
+
+
+/*
+ * Datos necesarios para actualizar una ruta.
+ */
+
+export interface UpdateMountainRoute {
+    name: string
+
+    distanceKm: number
+
+    elevationGain: number
+
+    totalTimeMinutes: number
+
+    movingTimeMinutes: number
+
+    criticalSection: RouteCriticalSection
+
+    personalRecommendations?: string | null
+
+    track: RoutePoint[]
+}
+
+
+/*
+ * ============================================
+ * FEATURES CERCANAS AL TRACK
+ * ============================================
+ */
+
+/*
+ * Obtiene las MountainFeatures que se encuentran
+ * cerca del recorrido de una ruta.
+ *
+ * POST /api/MountainRoutes/FeaturesAlongTrack
+ *
+ * El backend utiliza actualmente un radio
+ * por defecto de 100 metros.
+ */
+
+export async function getFeaturesAlongTrack(
+    track: RoutePoint[]
+): Promise<MountainFeature[]> {
+
+    const response = await fetch(
+        `${API_URL}/MountainRoutes/FeaturesAlongTrack`,
+        {
+            method: 'POST',
+
+            headers: {
+                'Content-Type': 'application/json',
+            },
+
+            body: JSON.stringify(track),
+        }
+    )
+
+    if (!response.ok) {
+
+        const errorText =
+            await response.text()
+
+        throw new Error(
+            errorText ||
+            `Error obteniendo features de la ruta: ${response.status}`
+        )
+    }
+
+    return response.json()
+}
+
+
+/*
+ * ============================================
+ * OBTENER TODAS LAS RUTAS
+ * ============================================
+ */
+
+export async function getRoutes(): Promise<MountainRoute[]> {
+
+    const response = await fetch(
+        `${API_URL}/MountainRoutes`
+    )
+
+    if (!response.ok) {
+
+        const errorText =
+            await response.text()
+
+        throw new Error(
+            errorText ||
+            `Error obteniendo las rutas: ${response.status}`
+        )
+    }
+
+    return response.json()
+}
+
+
+/*
+ * ============================================
+ * OBTENER UNA RUTA
+ * ============================================
+ */
+
+export async function getRoute(
+    id: string
+): Promise<MountainRoute> {
+
+    const response = await fetch(
+        `${API_URL}/MountainRoutes/${encodeURIComponent(id)}`
+    )
+
+    if (!response.ok) {
+
+        if (response.status === 404) {
+            throw new Error(
+                'Ruta no encontrada'
+            )
+        }
+
+        const errorText =
+            await response.text()
+
+        throw new Error(
+            errorText ||
+            `Error obteniendo la ruta: ${response.status}`
+        )
+    }
+
+    return response.json()
+}
+
+
+/*
+ * ============================================
+ * CREAR RUTA
+ * ============================================
+ */
+
+export async function createRoute(
+    route: CreateMountainRoute
+): Promise<MountainRoute> {
+
+    const response = await fetch(
+        `${API_URL}/MountainRoutes`,
+        {
+            method: 'POST',
+
+            headers: {
+                'Content-Type': 'application/json',
+            },
+
+            body: JSON.stringify(route),
+        }
+    )
+
+    if (!response.ok) {
+
+        const errorText =
+            await response.text()
+
+        throw new Error(
+            errorText ||
+            `Error creando la ruta: ${response.status}`
+        )
+    }
+
+    return response.json()
+}
+
+
+/*
+ * ============================================
+ * ACTUALIZAR RUTA
+ * ============================================
+ */
+
+export async function updateRoute(
+    id: string,
+    route: UpdateMountainRoute
+): Promise<void> {
+
+    const response = await fetch(
+        `${API_URL}/MountainRoutes/${encodeURIComponent(id)}`,
+        {
+            method: 'PUT',
+
+            headers: {
+                'Content-Type': 'application/json',
+            },
+
+            body: JSON.stringify(route),
+        }
+    )
+
+    if (!response.ok) {
+
+        const errorText =
+            await response.text()
+
+        throw new Error(
+            errorText ||
+            `Error actualizando la ruta: ${response.status}`
+        )
+    }
+}
+
+
+/*
+ * ============================================
+ * ELIMINAR RUTA
+ * ============================================
+ */
+
+export async function deleteRoute(
+    id: string
+): Promise<void> {
+
+    const response = await fetch(
+        `${API_URL}/MountainRoutes/${encodeURIComponent(id)}`,
+        {
+            method: 'DELETE',
+        }
+    )
+
+    if (!response.ok) {
+
+        const errorText =
+            await response.text()
+
+        throw new Error(
+            errorText ||
+            `Error eliminando la ruta: ${response.status}`
         )
     }
 }

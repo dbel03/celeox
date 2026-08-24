@@ -6,15 +6,12 @@ namespace CeleoxApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class MountainRoutesController : ControllerBase
+public class MountainRoutesController(
+    MountainRouteService service,
+    MountainFeatureService featureService) : ControllerBase
 {
-    private readonly MountainRouteService _service;
-
-    public MountainRoutesController(
-        MountainRouteService service)
-    {
-        _service = service;
-    }
+    private readonly MountainRouteService _service = service;
+    private readonly MountainFeatureService _featureService = featureService;
 
     [HttpGet]
     public async Task<ActionResult<List<MountainRoute>>> GetAll()
@@ -36,53 +33,53 @@ public class MountainRoutesController : ControllerBase
         return Ok(route);
     }
 
-[HttpPost]
-public async Task<ActionResult<MountainRoute>> Create(
-    [FromBody] MountainRoute route)
-{
-    try
+    [HttpPost]
+    public async Task<ActionResult<MountainRoute>> Create(
+        [FromBody] MountainRoute route)
     {
-        var createdRoute =
-            await _service.CreateAsync(route);
-
-        return CreatedAtAction(
-            nameof(GetById),
-            new { id = createdRoute.Id },
-            createdRoute
-        );
-    }
-    catch (ArgumentException ex)
-    {
-        return BadRequest(new
+        try
         {
-            message = ex.Message
-        });
-    }
-}
+            var createdRoute =
+                await _service.CreateAsync(route);
 
-[HttpPut("{id}")]
-public async Task<IActionResult> Update(
-    string id,
-    [FromBody] MountainRoute route)
-{
-    try
-    {
-        var updated =
-            await _service.UpdateAsync(id, route);
-
-        if (!updated)
-            return NotFound();
-
-        return NoContent();
-    }
-    catch (ArgumentException ex)
-    {
-        return BadRequest(new
+            return CreatedAtAction(
+                nameof(GetById),
+                new { id = createdRoute.Id },
+                createdRoute
+            );
+        }
+        catch (ArgumentException ex)
         {
-            message = ex.Message
-        });
+            return BadRequest(new
+            {
+                message = ex.Message
+            });
+        }
     }
-}
+
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Update(
+        string id,
+        [FromBody] MountainRoute route)
+    {
+        try
+        {
+            var updated =
+                await _service.UpdateAsync(id, route);
+
+            if (!updated)
+                return NotFound();
+
+            return NoContent();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new
+            {
+                message = ex.Message
+            });
+        }
+    }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(
@@ -95,5 +92,27 @@ public async Task<IActionResult> Update(
             return NotFound();
 
         return NoContent();
+    }
+
+    [HttpPost("FeaturesAlongTrack")]
+    public async Task<ActionResult<List<MountainFeature>>> FeaturesAlongTrack(
+    [FromBody] List<RoutePoint> track)
+    {
+        try
+        {
+            var features =
+                await _featureService.GetFeaturesAlongTrackAsync(
+                    track
+                );
+
+            return Ok(features);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new
+            {
+                message = ex.Message
+            });
+        }
     }
 }
