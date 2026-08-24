@@ -103,6 +103,15 @@ const mapLayers: MapLayer[] = [
 
 
 /* =========================================================
+   UBICACIÓN
+========================================================= */
+
+const LOCATION_TIMEOUT_MS = 8000
+
+const catalunyaCenter: [number, number] = [41.7, 1.75]
+
+
+/* =========================================================
    COMPARAR FEATURES
 ========================================================= */
 
@@ -600,6 +609,115 @@ function MapView({ onDetailOpenChange }: MapViewProps) {
     ] = useState<LeafletMap | null>(null)
 
 
+    /* =====================================================
+       AVISO DE UBICACIÓN NO DISPONIBLE
+       (timeout o error de permisos)
+    ===================================================== */
+
+    const [
+        locationUnavailable,
+        setLocationUnavailable,
+    ] = useState(false)
+
+
+    const [
+        showLocationNotice,
+        setShowLocationNotice,
+    ] = useState(false)
+
+
+    const [
+        locationNoticeMessage,
+        setLocationNoticeMessage,
+    ] = useState('')
+
+
+    /*
+     * Si el navegador reporta un error (por ejemplo,
+     * permiso denegado), no bloqueamos el mapa: mostramos
+     * el aviso inmediatamente y dejamos cargar con el
+     * centro de fallback.
+     */
+    useEffect(() => {
+
+        if (!error) {
+            return
+        }
+
+
+        setLocationUnavailable(true)
+
+        setLocationNoticeMessage(
+            'No hemos podido acceder a tu ubicación (permiso denegado o no disponible). Puedes explorar el mapa igualmente y activarla más tarde con el botón de ubicación.'
+        )
+
+        setShowLocationNotice(true)
+
+    }, [
+        error,
+    ])
+
+
+    /*
+     * Si tras unos segundos no hay ubicación NI error
+     * (el navegador sigue esperando respuesta del usuario
+     * o del GPS), mostramos el mismo aviso por timeout.
+     */
+    useEffect(() => {
+
+        if (userLocation || error) {
+            return
+        }
+
+
+        const timeoutId =
+            window.setTimeout(() => {
+
+                setLocationUnavailable(true)
+
+                setLocationNoticeMessage(
+                    'No hemos podido obtener tu ubicación. Puedes explorar el mapa igualmente y recuperarla más tarde con el botón de ubicación.'
+                )
+
+                setShowLocationNotice(true)
+
+            }, LOCATION_TIMEOUT_MS)
+
+
+        return () => {
+
+            window.clearTimeout(
+                timeoutId
+            )
+
+        }
+
+    }, [
+        userLocation,
+        error,
+    ])
+
+
+    /*
+     * Si la ubicación llega más tarde (el usuario
+     * acepta el permiso, o el GPS tarda pero responde),
+     * ocultamos el aviso automáticamente.
+     */
+    useEffect(() => {
+
+        if (userLocation) {
+
+            setShowLocationNotice(
+                false
+            )
+
+        }
+
+    }, [
+        userLocation,
+    ])
+
+
     /* =====================================================el 
        DETECTAR MÓVIL
     ===================================================== */
@@ -916,39 +1034,10 @@ function MapView({ onDetailOpenChange }: MapViewProps) {
 
 
     /* =====================================================
-       ERROR
-    ===================================================== */
-
-    if (error) {
-
-        return (
-
-            <div
-                className="
-                    flex
-                    h-full
-                    w-full
-                    items-center
-                    justify-center
-                "
-            >
-
-                <p className="text-red-500">
-                    {error}
-                </p>
-
-            </div>
-
-        )
-
-    }
-
-
-    /* =====================================================
        ESPERANDO UBICACIÓN
     ===================================================== */
 
-    if (!userLocation) {
+    if (!userLocation && !locationUnavailable) {
 
         return (
 
@@ -974,6 +1063,14 @@ function MapView({ onDetailOpenChange }: MapViewProps) {
 
 
     /* =====================================================
+       CENTRO DEL MAPA
+    ===================================================== */
+
+    const mapCenter =
+        userLocation ?? catalunyaCenter
+
+
+    /* =====================================================
        RENDER
     ===================================================== */
 
@@ -988,6 +1085,73 @@ function MapView({ onDetailOpenChange }: MapViewProps) {
                 overflow-hidden
             "
         >
+
+            {/* =================================================
+                AVISO DE UBICACIÓN NO DISPONIBLE
+            ================================================= */}
+
+            {showLocationNotice && (
+
+                <div
+                    className="
+                        absolute
+                        left-1/2
+                        top-20
+                        z-[1500]
+                        w-[calc(100%-2rem)]
+                        max-w-sm
+                        -translate-x-1/2
+                        rounded-xl
+                        border
+                        border-amber-200
+                        bg-amber-50
+                        p-4
+                        shadow-xl
+                    "
+                >
+
+                    <div
+                        className="
+                            flex
+                            items-start
+                            justify-between
+                            gap-3
+                        "
+                    >
+
+                        <p
+                            className="
+                                text-sm
+                                text-amber-800
+                            "
+                        >
+                            {locationNoticeMessage}
+                        </p>
+
+
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setShowLocationNotice(
+                                    false
+                                )
+                            }
+                            aria-label="Cerrar aviso"
+                            className="
+                                shrink-0
+                                text-amber-500
+                                hover:text-amber-700
+                            "
+                        >
+                            ✕
+                        </button>
+
+                    </div>
+
+                </div>
+
+            )}
+
 
             {/* =================================================
                 CONTROLES SUPERIORES
@@ -1448,7 +1612,7 @@ function MapView({ onDetailOpenChange }: MapViewProps) {
                     }
 
                 }}
-                center={userLocation}
+                center={mapCenter}
                 zoom={13}
                 zoomControl={false}
                 minZoom={8}
@@ -1518,38 +1682,42 @@ function MapView({ onDetailOpenChange }: MapViewProps) {
                     UBICACIÓN
                 ================================================= */}
 
-                <Marker
-                    position={
-                        userLocation
-                    }
-                    icon={
-                        userLocationIcon
-                    }
-                >
+                {userLocation && (
 
-                    <Popup>
-
-                        <strong>
-                            Tu ubicación
-                        </strong>
-
-                        <br />
-
-                        Latitud:{' '}
-                        {
-                            userLocation[0]
+                    <Marker
+                        position={
+                            userLocation
                         }
-
-                        <br />
-
-                        Longitud:{' '}
-                        {
-                            userLocation[1]
+                        icon={
+                            userLocationIcon
                         }
+                    >
 
-                    </Popup>
+                        <Popup>
 
-                </Marker>
+                            <strong>
+                                Tu ubicación
+                            </strong>
+
+                            <br />
+
+                            Latitud:{' '}
+                            {
+                                userLocation[0]
+                            }
+
+                            <br />
+
+                            Longitud:{' '}
+                            {
+                                userLocation[1]
+                            }
+
+                        </Popup>
+
+                    </Marker>
+
+                )}
 
 
                 {/* =================================================
@@ -1625,26 +1793,30 @@ function MapView({ onDetailOpenChange }: MapViewProps) {
                 </div>
 
 
-                <div
-                    className="
-                        mt-1
-                        text-xs
-                        text-gray-500
-                    "
-                >
-                    📍{' '}
-                    {
-                        userLocation[0].toFixed(
-                            6
-                        )
-                    }
-                    {', '}
-                    {
-                        userLocation[1].toFixed(
-                            6
-                        )
-                    }
-                </div>
+                {userLocation && (
+
+                    <div
+                        className="
+                            mt-1
+                            text-xs
+                            text-gray-500
+                        "
+                    >
+                        📍{' '}
+                        {
+                            userLocation[0].toFixed(
+                                6
+                            )
+                        }
+                        {', '}
+                        {
+                            userLocation[1].toFixed(
+                                6
+                            )
+                        }
+                    </div>
+
+                )}
 
             </div>
 
