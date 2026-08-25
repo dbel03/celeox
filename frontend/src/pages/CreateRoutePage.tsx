@@ -2,7 +2,6 @@ import { useCallback, useState, Fragment } from 'react'
 import type { SyntheticEvent } from 'react'
 
 import {
-    MapContainer,
     TileLayer,
     Polyline,
     CircleMarker,
@@ -29,10 +28,7 @@ import {
     ROUTE_CRITICAL_SECTIONS,
 } from '../types/route'
 
-const catalunyaCenter: [number, number] = [
-    41.7,
-    1.75,
-]
+import MapView from '../components/map/MapView'
 
 type RouteDifficulty =
     | 'Muy fácil'
@@ -1527,14 +1523,8 @@ function CreateRoutePage() {
 
             <div className="relative h-64 w-full sm:h-full sm:flex-1">
 
-                <MapContainer
-                    center={
-                        catalunyaCenter
-                    }
-                    zoom={13}
-                    className="h-full w-full"
-                >
-
+                <MapView>
+                    
                     <TileLayer
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -1756,14 +1746,14 @@ function CreateRoutePage() {
                         )
                     )}
 
-                </MapContainer>
+                </MapView>
 
                 {/* =================================================
                     MENSAJE DE ESTADO DEL MAPA
                 ================================================= */}
 
-                <div className="absolute left-1/2 top-4 z-[1000] -translate-x-1/2 rounded-xl bg-white px-4 py-2 text-center text-sm font-semibold text-gray-800 shadow-lg">
-
+<div className="fixed left-4 top-20 z-[1000] rounded-xl bg-white px-4 py-2 text-center text-sm font-semibold text-gray-800 shadow-lg">
+    
                     {requireExistingPointAfterDelete
                         ? '🔗 Selecciona un punto existente para continuar la ruta'
                         : !pendingFrom

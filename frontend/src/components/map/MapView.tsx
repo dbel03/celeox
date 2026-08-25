@@ -15,6 +15,7 @@ import {
     useEffect,
     useRef,
     useState,
+    type ReactNode,
 } from 'react'
 
 import {
@@ -65,6 +66,7 @@ interface MapLayer {
 
 interface MapViewProps {
     onDetailOpenChange?: (open: boolean) => void
+    children?: ReactNode
 }
 
 /* =========================================================
@@ -533,7 +535,7 @@ function LocationController({
    MAP VIEW
 ========================================================= */
 
-function MapView({ onDetailOpenChange }: MapViewProps) {
+function MapView({ onDetailOpenChange, children }: MapViewProps) {
 
     const {
         location: userLocation,
@@ -1753,7 +1755,8 @@ function MapView({ onDetailOpenChange }: MapViewProps) {
                     )}
 
                 </MarkerClusterGroup>
-
+                
+                {children}
             </MapContainer>
 
 
