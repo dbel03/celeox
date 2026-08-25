@@ -67,7 +67,7 @@ public class BackblazeService
                 Prefix = objectKey
             }
         );
-        
+
         var versionsToDelete = versionsResponse.Versions?
             .Where(v => v.Key == objectKey)
             .ToList() ?? [];
@@ -88,5 +88,18 @@ public class BackblazeService
                 }
             );
         }
+    }
+
+    public async Task<Stream> OpenReadAsync(string objectKey)
+    {
+        var request = new GetObjectRequest
+        {
+            BucketName = _settings.BucketName,
+            Key = objectKey
+        };
+
+        var response = await _s3.GetObjectAsync(request);
+
+        return response.ResponseStream;
     }
 }

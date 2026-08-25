@@ -36,6 +36,9 @@ WORKDIR /app
 COPY --from=backend-build /app/publish .
 COPY --from=frontend-build /app/frontend/dist ./wwwroot
 
+# Producción
+ENV ASPNETCORE_ENVIRONMENT=Production
+
 # Evita el crash por límite de inotify en contenedores
 ENV DOTNET_hostBuilder__reloadConfigOnChange=false
 

@@ -494,3 +494,37 @@ export async function deleteRoute(
         )
     }
 }
+
+export interface RoutingResult {
+    shape: RoutePoint[]
+    distanceMeters: number
+    durationSeconds: number
+}
+
+export async function calculateRoute(
+    from: RoutePoint,
+    to: RoutePoint
+): Promise<RoutingResult> {
+
+    const response = await fetch(
+        `${API_URL}/routing/calculate`,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ from, to }),
+        }
+    )
+
+    if (!response.ok) {
+        const errorText = await response.text()
+
+        throw new Error(
+            errorText ||
+            `Error calculando la ruta: ${response.status}`
+        )
+    }
+
+    return response.json()
+}
