@@ -45,7 +45,7 @@ public class LocalRoutingController(
             "cataluna.routerdb");
 
         const string b2ObjectKey =
-            "routing/catalonia.routerdb";
+            "routing/cataluna.routerdb";
 
         if (!System.IO.File.Exists(osmPath))
         {
