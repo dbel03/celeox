@@ -1,13 +1,15 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, Fragment } from 'react'
 import type { SyntheticEvent } from 'react'
+
 import {
     MapContainer,
     TileLayer,
     Polyline,
+    CircleMarker,
+    useMapEvents,
 } from 'react-leaflet'
-import 'leaflet/dist/leaflet.css'
 
-import RouteDrawing from '../components/map/RouteDrawing'
+import 'leaflet/dist/leaflet.css'
 
 import {
     createRoute,
@@ -15,9 +17,7 @@ import {
     calculateRoute,
 } from '../services/api'
 
-import type {
-    MountainFeature,
-} from '../services/api'
+import type { MountainFeature } from '../services/api'
 
 import type {
     RoutePoint,
@@ -33,12 +33,6 @@ const catalunyaCenter: [number, number] = [
     41.7,
     1.75,
 ]
-
-/*
- * =========================================================
- * TIPOS
- * =========================================================
- */
 
 type RouteDifficulty =
     | 'Muy fácil'
@@ -57,41 +51,19 @@ const ROUTE_DIFFICULTIES: RouteDifficulty[] = [
 
 interface RouteSegment {
     id: string
-
-    points: RoutePoint[]
-
-    /*
-     * Ruta calculada por Itinero.
-     * Puede ser diferente al dibujo original.
-     */
+    name: string
+    from: RoutePoint
+    to: RoutePoint
     routingShape: RoutePoint[]
-
     distanceMeters: number | null
-
     durationSeconds: number | null
-
     difficulty: RouteDifficulty
-
     criticalSection: RouteCriticalSection
-
     personalRecommendations: string
-
-    /*
-     * IDs de elementos encontrados
-     * alrededor de este tramo.
-     */
     featureIds: string[]
-
-    /*
-     * Elementos completos para mostrarlos
-     * en la interfaz durante la edición.
-     */
     features: MountainFeature[]
-
     routingLoading: boolean
-
     nearbyLoading: boolean
-
     error: string | null
 }
 
@@ -117,9 +89,31 @@ const initialForm: RouteFormState = {
 
 /*
  * =========================================================
- * HELPERS
+ * TOLERANCIA PARA CONSIDERAR DOS PUNTOS IGUALES
  * =========================================================
+ *
+ * Los puntos procedentes del mapa deberían coincidir
+ * exactamente, pero usamos una pequeña tolerancia para
+ * evitar problemas de precisión decimal.
  */
+
+const POINT_EPSILON = 0.00001
+
+function pointsAreEqual(
+    first: RoutePoint,
+    second: RoutePoint
+) {
+    return (
+        Math.abs(
+            first.latitude -
+            second.latitude
+        ) <= POINT_EPSILON &&
+        Math.abs(
+            first.longitude -
+            second.longitude
+        ) <= POINT_EPSILON
+    )
+}
 
 function createSegmentId() {
     return `segment-${Date.now()}-${Math.random()
@@ -129,53 +123,554 @@ function createSegmentId() {
 
 /*
  * =========================================================
+ * MAP CLICK HANDLER
+ * =========================================================
+ */
+
+interface MapClickHandlerProps {
+    disabled: boolean
+    onMapClick: (point: RoutePoint) => void
+}
+
+function MapClickHandler({
+    disabled,
+    onMapClick,
+}: MapClickHandlerProps) {
+    useMapEvents({
+        click(event) {
+            if (disabled) {
+                return
+            }
+
+            onMapClick({
+                latitude: event.latlng.lat,
+                longitude: event.latlng.lng,
+            })
+        },
+    })
+
+    return null
+}
+
+/*
+ * =========================================================
+ * VALIDACIÓN DE CONTINUIDAD
+ * =========================================================
+ *
+ * Una ruta válida puede ser:
+ *
+ * ABIERTA:
+ *
+ * A ---- B ---- C ---- D
+ *
+ * Tiene exactamente 2 extremos.
+ *
+ * CIRCULAR:
+ *
+ * A ---- B
+ * |      |
+ * D ---- C
+ *
+ * No tiene extremos.
+ *
+ * No permitimos:
+ *
+ * A ---- B
+ *       |
+ *       C
+ *
+ * porque eso crea una bifurcación.
+ */
+
+interface RouteGraphNode {
+    point: RoutePoint
+    degree: number
+}
+
+function getRouteGraph(
+    segments: RouteSegment[]
+) {
+    const nodes: RouteGraphNode[] = []
+
+    const getNode = (
+        point: RoutePoint
+    ) => {
+        let node = nodes.find(
+            (candidate) =>
+                pointsAreEqual(
+                    candidate.point,
+                    point
+                )
+        )
+
+        if (!node) {
+            node = {
+                point,
+                degree: 0,
+            }
+
+            nodes.push(node)
+        }
+
+        return node
+    }
+
+    for (const segment of segments) {
+        const fromNode =
+            getNode(segment.from)
+
+        const toNode =
+            getNode(segment.to)
+
+        /*
+         * Un tramo normal aumenta un grado en cada extremo.
+         *
+         * Si es un bucle sobre sí mismo, ambos extremos
+         * son el mismo nodo y el grado aumenta en 2.
+         */
+        fromNode.degree += 1
+        toNode.degree += 1
+    }
+
+    return nodes
+}
+
+function validateRouteContinuity(
+    segments: RouteSegment[]
+): string | null {
+    if (segments.length === 0) {
+        return 'No hay tramos para guardar.'
+    }
+
+    /*
+     * =============================================
+     * COMPROBAR QUE TODOS LOS TRAMOS ESTÁN CONECTADOS
+     * =============================================
+     */
+
+    const visited = new Set<string>()
+
+    const firstSegment =
+        segments[0]
+
+    const queue: RoutePoint[] = [
+        firstSegment.from,
+        firstSegment.to,
+    ]
+
+    const pointKey = (
+        point: RoutePoint
+    ) =>
+        `${point.latitude.toFixed(7)},${point.longitude.toFixed(7)}`
+
+    while (queue.length > 0) {
+        const current =
+            queue.shift()!
+
+        const key =
+            pointKey(current)
+
+        if (visited.has(key)) {
+            continue
+        }
+
+        visited.add(key)
+
+        for (const segment of segments) {
+            if (
+                pointsAreEqual(
+                    segment.from,
+                    current
+                )
+            ) {
+                queue.push(segment.to)
+            }
+
+            if (
+                pointsAreEqual(
+                    segment.to,
+                    current
+                )
+            ) {
+                queue.push(segment.from)
+            }
+        }
+    }
+
+    const disconnectedSegment =
+        segments.find(
+            (segment) =>
+                !visited.has(
+                    pointKey(
+                        segment.from
+                    )
+                ) &&
+                !visited.has(
+                    pointKey(
+                        segment.to
+                    )
+                )
+        )
+
+    if (disconnectedSegment) {
+        return (
+            'Los tramos no forman una ruta continua. ' +
+            'Conecta todos los tramos antes de guardar.'
+        )
+    }
+
+    /*
+     * =============================================
+     * COMPROBAR EXTREMOS
+     * =============================================
+     */
+
+    const nodes =
+        getRouteGraph(segments)
+
+    const endpoints =
+        nodes.filter(
+            (node) =>
+                node.degree === 1
+        )
+
+    const invalidNode =
+        nodes.find(
+            (node) =>
+                node.degree > 2
+        )
+
+    /*
+     * Una ruta lineal debe tener exactamente
+     * dos extremos.
+     *
+     * Una ruta circular debe tener cero.
+     */
+
+    if (invalidNode) {
+        return (
+            'La ruta contiene una bifurcación. ' +
+            'Todos los tramos deben formar un único recorrido, ' +
+            'sin ramas.'
+        )
+    }
+
+    if (
+        endpoints.length !== 0 &&
+        endpoints.length !== 2
+    ) {
+        return (
+            'Los tramos no forman un recorrido continuo. ' +
+            'Comprueba que todos los puntos estén unidos.'
+        )
+    }
+
+    return null
+}
+
+/*
+ * =========================================================
+ * ORDENAR TRAMOS SEGÚN EL RECORRIDO
+ * =========================================================
+ *
+ * Esto es importante porque el usuario puede crear los
+ * tramos en un orden que no coincida con el orden real
+ * de la ruta.
+ *
+ * El backend recibirá siempre:
+ *
+ * A -> B -> C -> D
+ *
+ * aunque el usuario haya creado:
+ *
+ * B -> C
+ * D -> C
+ * A -> B
+ */
+
+function orderSegmentsForTrack(
+    segments: RouteSegment[]
+): RouteSegment[] {
+    if (segments.length <= 1) {
+        return [...segments]
+    }
+
+    const nodes =
+        getRouteGraph(segments)
+
+    const endpoints =
+        nodes.filter(
+            (node) =>
+                node.degree === 1
+        )
+
+    /*
+     * Si es una ruta abierta empezamos en uno de
+     * los extremos.
+     *
+     * Si es circular podemos empezar en cualquier
+     * punto.
+     */
+
+    let currentPoint: RoutePoint
+
+    if (endpoints.length === 2) {
+        currentPoint =
+            endpoints[0].point
+    } else {
+        currentPoint =
+            segments[0].from
+    }
+
+    const remaining =
+        new Set(
+            segments.map(
+                (segment) =>
+                    segment.id
+            )
+        )
+
+    const ordered: RouteSegment[] = []
+
+    while (
+        remaining.size > 0
+    ) {
+        const nextSegment =
+            segments.find(
+                (segment) =>
+                    remaining.has(
+                        segment.id
+                    ) &&
+                    (
+                        pointsAreEqual(
+                            segment.from,
+                            currentPoint
+                        ) ||
+                        pointsAreEqual(
+                            segment.to,
+                            currentPoint
+                        )
+                    )
+            )
+
+        /*
+         * No debería suceder si la validación de
+         * continuidad ha pasado, pero dejamos una
+         * protección adicional.
+         */
+
+        if (!nextSegment) {
+            break
+        }
+
+        ordered.push(
+            nextSegment
+        )
+
+        remaining.delete(
+            nextSegment.id
+        )
+
+        if (
+            pointsAreEqual(
+                nextSegment.from,
+                currentPoint
+            )
+        ) {
+            currentPoint =
+                nextSegment.to
+        } else {
+            currentPoint =
+                nextSegment.from
+        }
+    }
+
+    /*
+     * Si por alguna razón no hemos podido ordenar
+     * todos los segmentos, devolvemos el orden
+     * original. La validación será la encargada
+     * de impedir guardar una ruta incorrecta.
+     */
+
+    if (
+        ordered.length !==
+        segments.length
+    ) {
+        return [...segments]
+    }
+
+    return ordered
+}
+
+function buildContinuousTrack(
+    segments: RouteSegment[]
+): RoutePoint[] {
+    const ordered =
+        orderSegmentsForTrack(
+            segments
+        )
+
+    if (
+        ordered.length === 0
+    ) {
+        return []
+    }
+
+    const track: RoutePoint[] = []
+
+    let currentPoint =
+        ordered[0].from
+
+    /*
+     * Orientamos el primer tramo.
+     */
+
+    let firstShape =
+        ordered[0].routingShape
+
+    if (
+        firstShape.length > 1 &&
+        !pointsAreEqual(
+            ordered[0].from,
+            currentPoint
+        )
+    ) {
+        firstShape =
+            [...firstShape].reverse()
+    }
+
+    track.push(
+        ...firstShape
+    )
+
+    currentPoint =
+        ordered[0].to
+
+    /*
+     * Los siguientes segmentos se orientan según
+     * el punto donde termina el anterior.
+     */
+
+    for (
+        let index = 1;
+        index < ordered.length;
+        index++
+    ) {
+        const segment =
+            ordered[index]
+
+        let shape =
+            segment.routingShape
+
+        if (
+            pointsAreEqual(
+                segment.to,
+                currentPoint
+            )
+        ) {
+            shape =
+                [...shape].reverse()
+        }
+
+        /*
+         * Evitamos duplicar el punto de unión.
+         */
+
+        if (
+            shape.length > 0 &&
+            track.length > 0 &&
+            pointsAreEqual(
+                track[track.length - 1],
+                shape[0]
+            )
+        ) {
+            track.push(
+                ...shape.slice(1)
+            )
+        } else {
+            track.push(
+                ...shape
+            )
+        }
+
+        if (
+            pointsAreEqual(
+                segment.from,
+                currentPoint
+            )
+        ) {
+            currentPoint =
+                segment.to
+        } else {
+            currentPoint =
+                segment.from
+        }
+    }
+
+    return track
+}
+
+/*
+ * =========================================================
  * COMPONENT
  * =========================================================
  */
 
 function CreateRoutePage() {
-    /*
-     * =====================================================
-     * ESTADO GENERAL
-     * =====================================================
-     */
-
-    const [drawing, setDrawing] =
-        useState(true)
-
-    /*
-     * Puntos del tramo que estamos dibujando
-     * actualmente.
-     */
-    const [currentPoints, setCurrentPoints] =
-        useState<RoutePoint[]>([])
-
-    /*
-     * Tramos ya terminados.
-     */
     const [segments, setSegments] =
         useState<RouteSegment[]>([])
 
     /*
-     * Tramo seleccionado para editar/borrar.
+     * =====================================================
+     * REGLA ÚNICA DE TODO EL EDITOR
+     * =====================================================
+     *
+     * pendingFrom === null  -> el próximo punto que se toque
+     *                          se convierte en el punto A.
+     *
+     * pendingFrom !== null  -> el próximo punto que se toque
+     *                          es el punto B: se crea el tramo
+     *                          A -> B, y B pasa a ser el nuevo A
+     *                          para poder encadenar el siguiente
+     *                          tramo.
+     *
+     * Esto sigue aplicando siempre, sin excepciones: ni al
+     * abrir un tramo, ni al seleccionarlo desde el panel.
      */
+
+    const [pendingFrom, setPendingFrom] =
+        useState<RoutePoint | null>(null)
+
+    /*
+     * =====================================================
+     * EXCEPCIÓN ÚNICA: JUSTO DESPUÉS DE BORRAR
+     * =====================================================
+     *
+     * Al borrar un tramo, el punto A del siguiente tramo NO
+     * puede decidirlo el código (no sabemos con cuál de los
+     * puntos existentes quería reconectar el usuario). Por
+     * eso, mientras esto sea true:
+     *
+     * - un click libre en el mapa NO cuenta como punto A
+     * - solo un click sobre un punto ya existente (marcador)
+     *   puede fijar el nuevo punto A
+     *
+     * En cuanto el usuario elige ese punto, esto vuelve a
+     * false y se retoma la regla única de siempre.
+     */
+
+    const [
+        requireExistingPointAfterDelete,
+        setRequireExistingPointAfterDelete,
+    ] = useState(false)
+
     const [selectedSegmentId, setSelectedSegmentId] =
         useState<string | null>(null)
 
-    /*
-     * Modo goma mágica.
-     */
-    const [eraserMode, setEraserMode] =
-        useState(false)
-
-    /*
-     * =====================================================
-     * FORMULARIO GENERAL
-     * =====================================================
-     */
-
     const [form, setForm] =
-        useState<RouteFormState>(initialForm)
+        useState<RouteFormState>(
+            initialForm
+        )
 
     const [saving, setSaving] =
         useState(false)
@@ -191,13 +686,6 @@ function CreateRoutePage() {
      * DATOS DERIVADOS
      * =====================================================
      */
-
-    const totalPoints =
-        segments.reduce(
-            (total, segment) =>
-                total + segment.points.length,
-            currentPoints.length
-        )
 
     const totalDistanceMeters =
         segments.reduce(
@@ -215,14 +703,15 @@ function CreateRoutePage() {
             0
         )
 
-    const allFeatureIds = Array.from(
-        new Set(
-            segments.flatMap(
-                (segment) =>
-                    segment.featureIds
+    const allFeatureIds =
+        Array.from(
+            new Set(
+                segments.flatMap(
+                    (segment) =>
+                        segment.featureIds
+                )
             )
         )
-    )
 
     /*
      * =====================================================
@@ -236,259 +725,436 @@ function CreateRoutePage() {
         field: K,
         value: RouteFormState[K]
     ) => {
-        setForm((previous) => ({
-            ...previous,
-            [field]: value,
-        }))
+        setForm(
+            (previous) => ({
+                ...previous,
+                [field]: value,
+            })
+        )
     }
 
     /*
      * =====================================================
-     * DIBUJO
+     * BORRAR TRAMO
      * =====================================================
+     *
+     * Al borrar, siempre volvemos al estado base: no hay A.
+     *
+     * Si todavía quedan tramos, además exigimos que el
+     * siguiente punto A se elija explícitamente sobre un
+     * punto ya existente (no vale un click libre en el
+     * mapa): es el usuario quien decide con qué punto
+     * quiere continuar la ruta, nunca el código.
      */
 
-    const handleUndo = useCallback(() => {
-        setCurrentPoints(
-            (previous) =>
-                previous.slice(0, -1)
-        )
-    }, [])
+    const handleDeleteSegment =
+        useCallback(
+            (segmentId: string) => {
+                setSegments(
+                    (previous) => {
+                        const remaining =
+                            previous.filter(
+                                (segment) =>
+                                    segment.id !==
+                                    segmentId
+                            )
 
-    const handleClearCurrent = useCallback(() => {
-        setCurrentPoints([])
-    }, [])
+                        setRequireExistingPointAfterDelete(
+                            remaining.length > 0
+                        )
+
+                        return remaining
+                    }
+                )
+
+                setPendingFrom(null)
+                setSelectedSegmentId(null)
+                setSaveError(null)
+                setSavedRouteName(null)
+            },
+            []
+        )
 
     /*
      * =====================================================
-     * CREAR TRAMO
-     *
-     * El usuario termina un tramo.
-     *
-     * Automáticamente:
-     *
-     * 1. Se crea el tramo.
-     * 2. Se llama a Itinero.
-     * 3. Se buscan elementos cercanos.
-     * 4. Se guardan sus IDs en memoria.
+     * CREAR TRAMO A -> B
      * =====================================================
      */
 
-    const finishCurrentSegment = useCallback(
-        async () => {
-            if (
-                currentPoints.length < 2
-            ) {
-                return
-            }
+    const calculateSegment =
+        useCallback(
+            async (
+                from: RoutePoint,
+                to: RoutePoint
+            ) => {
+                /*
+                 * Evitamos crear un tramo de un punto
+                 * exactamente al mismo punto.
+                 */
 
-            const points =
-                [...currentPoints]
-
-            const segmentId =
-                createSegmentId()
-
-            /*
-             * Crear inmediatamente el tramo
-             * para que aparezca en pantalla.
-             */
-            const newSegment: RouteSegment = {
-                id: segmentId,
-
-                points,
-
-                routingShape: [],
-
-                distanceMeters: null,
-
-                durationSeconds: null,
-
-                difficulty: 'Moderada',
-
-                criticalSection:
-                    ROUTE_CRITICAL_SECTIONS[0],
-
-                personalRecommendations:
-                    '',
-
-                featureIds: [],
-
-                features: [],
-
-                routingLoading: true,
-
-                nearbyLoading: true,
-
-                error: null,
-            }
-
-            setSegments(
-                (previous) => [
-                    ...previous,
-                    newSegment,
-                ]
-            )
-
-            /*
-             * Limpiamos el dibujo actual.
-             * Ahora se puede dibujar el siguiente tramo.
-             */
-            setCurrentPoints([])
-
-            setDrawing(true)
-
-            /*
-             * =============================================
-             * ITINERO
-             * =============================================
-             */
-
-            try {
-                const from =
-                    points[0]
-
-                const to =
-                    points[
-                        points.length - 1
-                    ]
-
-                const routing =
-                    await calculateRoute(
+                if (
+                    pointsAreEqual(
                         from,
                         to
                     )
+                ) {
+                    return
+                }
+
+                const segmentId =
+                    createSegmentId()
+
+                const newSegment:
+                    RouteSegment = {
+                    id: segmentId,
+
+                    name: '',
+
+                    from,
+
+                    to,
+
+                    routingShape: [],
+
+                    distanceMeters: null,
+
+                    durationSeconds: null,
+
+                    difficulty: 'Moderada',
+
+                    criticalSection:
+                        ROUTE_CRITICAL_SECTIONS[0],
+
+                    personalRecommendations:
+                        '',
+
+                    featureIds: [],
+
+                    features: [],
+
+                    routingLoading: true,
+
+                    nearbyLoading: true,
+
+                    error: null,
+                }
 
                 setSegments(
-                    (previous) =>
-                        previous.map(
-                            (segment) =>
-                                segment.id ===
-                                segmentId
-                                    ? {
-                                          ...segment,
+                    (previous) => [
+                        ...previous,
+                        newSegment,
+                    ]
+                )
 
-                                          routingShape:
-                                              routing.shape,
+                setSelectedSegmentId(
+                    segmentId
+                )
 
-                                          distanceMeters:
-                                              routing.distanceMeters,
+                /*
+                 * =============================================
+                 * ITINERO
+                 * =============================================
+                 */
 
-                                          durationSeconds:
-                                              routing.durationSeconds,
-
-                                          routingLoading:
-                                              false,
-                                      }
-                                    : segment
+                try {
+                    const routing =
+                        await calculateRoute(
+                            from,
+                            to
                         )
-                )
-            } catch (error) {
-                console.error(
-                    'Error ejecutando Itinero:',
-                    error
-                )
 
-                setSegments(
-                    (previous) =>
-                        previous.map(
-                            (segment) =>
-                                segment.id ===
-                                segmentId
-                                    ? {
-                                          ...segment,
+                    setSegments(
+                        (previous) =>
+                            previous.map(
+                                (segment) =>
+                                    segment.id ===
+                                        segmentId
+                                        ? {
+                                            ...segment,
 
-                                          routingLoading:
-                                              false,
+                                            routingShape:
+                                                routing.shape,
 
-                                          error:
-                                              error instanceof
-                                              Error
-                                                  ? error.message
-                                                  : 'Error ejecutando Itinero.',
-                                      }
-                                    : segment
-                        )
-                )
-            }
+                                            distanceMeters:
+                                                routing.distanceMeters,
 
-            /*
-             * =============================================
-             * ELEMENTOS CERCANOS
-             * =============================================
-             */
+                                            durationSeconds:
+                                                routing.durationSeconds,
 
-            try {
-                const features =
-                    await getFeaturesAlongTrack(
-                        points
+                                            routingLoading:
+                                                false,
+                                        }
+                                        : segment
+                            )
                     )
 
-                const featureIds =
-                    features.map(
-                        (feature) =>
-                            feature.id
+                    /*
+                     * =========================================
+                     * FEATURES CERCA DEL TRACK
+                     * =========================================
+                     */
+
+                    try {
+                        const features =
+                            await getFeaturesAlongTrack(
+                                routing.shape
+                            )
+
+                        const featureIds =
+                            features.map(
+                                (feature) =>
+                                    feature.id
+                            )
+
+                        setSegments(
+                            (previous) =>
+                                previous.map(
+                                    (segment) =>
+                                        segment.id ===
+                                            segmentId
+                                            ? {
+                                                ...segment,
+
+                                                features,
+
+                                                featureIds,
+
+                                                nearbyLoading:
+                                                    false,
+                                            }
+                                            : segment
+                                )
+                        )
+                    } catch (
+                    error
+                    ) {
+                        console.error(
+                            'Error buscando elementos:',
+                            error
+                        )
+
+                        setSegments(
+                            (previous) =>
+                                previous.map(
+                                    (segment) =>
+                                        segment.id ===
+                                            segmentId
+                                            ? {
+                                                ...segment,
+
+                                                nearbyLoading:
+                                                    false,
+
+                                                error:
+                                                    error instanceof
+                                                        Error
+                                                        ? error.message
+                                                        : 'Error buscando elementos cercanos.',
+                                            }
+                                            : segment
+                                )
+                        )
+                    }
+                } catch (
+                error
+                ) {
+                    console.error(
+                        'Error ejecutando Itinero:',
+                        error
                     )
 
-                setSegments(
-                    (previous) =>
-                        previous.map(
-                            (segment) =>
-                                segment.id ===
-                                segmentId
-                                    ? {
-                                          ...segment,
+                    setSegments(
+                        (previous) =>
+                            previous.map(
+                                (segment) =>
+                                    segment.id ===
+                                        segmentId
+                                        ? {
+                                            ...segment,
 
-                                          features,
+                                            routingLoading:
+                                                false,
 
-                                          featureIds,
+                                            nearbyLoading:
+                                                false,
 
-                                          nearbyLoading:
-                                              false,
-                                      }
-                                    : segment
-                        )
-                )
-            } catch (error) {
-                console.error(
-                    'Error buscando elementos:',
-                    error
-                )
-
-                setSegments(
-                    (previous) =>
-                        previous.map(
-                            (segment) =>
-                                segment.id ===
-                                segmentId
-                                    ? {
-                                          ...segment,
-
-                                          nearbyLoading:
-                                              false,
-
-                                          error:
-                                              error instanceof
-                                              Error
-                                                  ? error.message
-                                                  : 'Error buscando elementos cercanos.',
-                                      }
-                                    : segment
-                        )
-                )
-            }
-        },
-        [currentPoints]
-    )
+                                            error:
+                                                error instanceof
+                                                    Error
+                                                    ? error.message
+                                                    : 'Error ejecutando Itinero.',
+                                        }
+                                        : segment
+                            )
+                    )
+                }
+            },
+            []
+        )
 
     /*
      * =====================================================
-     * SELECCIONAR TRAMO
+     * ÚNICO PUNTO DE ENTRADA PARA FIJAR A O B
+     * =====================================================
+     *
+     * Lo usan por igual el click libre en el mapa y el click
+     * sobre cualquier marcador (A o B) de cualquier tramo ya
+     * existente. No hay ninguna otra vía para fijar un punto,
+     * así que la regla "sin A no hay B" solo tiene que vivir
+     * aquí, una vez.
+     *
+     * `isExistingPoint` indica si el click viene de un marcador
+     * real (true) o de un punto libre del mapa (false). Solo
+     * importa justo después de borrar un tramo: en ese momento
+     * un click libre no puede decidir por el usuario cuál es
+     * el punto A de reconexión.
+     */
+
+    const handlePointSelected =
+        useCallback(
+            (
+                point: RoutePoint,
+                isExistingPoint: boolean
+            ) => {
+                if (saving) {
+                    return
+                }
+
+                /*
+                 * Justo después de borrar: un click libre no
+                 * cuenta. El usuario tiene que elegir uno de
+                 * los puntos ya existentes.
+                 */
+
+                if (
+                    requireExistingPointAfterDelete &&
+                    !isExistingPoint
+                ) {
+                    return
+                }
+
+                setSaveError(null)
+                setSavedRouteName(null)
+
+                if (
+                    requireExistingPointAfterDelete
+                ) {
+                    setRequireExistingPointAfterDelete(
+                        false
+                    )
+                }
+
+                /*
+                 * No hay A todavía: este punto se convierte
+                 * en el punto A.
+                 */
+
+                if (!pendingFrom) {
+                    setPendingFrom(
+                        point
+                    )
+
+                    return
+                }
+
+                /*
+                 * Ya hay A: este punto es el B. Creamos el
+                 * tramo A -> B.
+                 */
+
+                const from =
+                    pendingFrom
+
+                const to =
+                    point
+
+                calculateSegment(
+                    from,
+                    to
+                )
+
+                /*
+                 * B se convierte automáticamente en el A
+                 * del siguiente tramo, para poder encadenar:
+                 *
+                 * A -> B
+                 * B -> C
+                 * C -> D
+                 */
+
+                setPendingFrom(
+                    to
+                )
+            },
+            [
+                pendingFrom,
+                calculateSegment,
+                saving,
+                requireExistingPointAfterDelete,
+            ]
+        )
+
+    /*
+     * =====================================================
+     * CLICK LIBRE EN MAPA
      * =====================================================
      */
 
-    const handleSelectSegment =
+    const handleMapClick =
+        useCallback(
+            (point: RoutePoint) => {
+                handlePointSelected(
+                    point,
+                    false
+                )
+            },
+            [
+                handlePointSelected,
+            ]
+        )
+
+    /*
+     * =====================================================
+     * CLICK SOBRE UN MARCADOR (A o B) DE UN TRAMO EXISTENTE
+     * =====================================================
+     *
+     * Sigue exactamente la misma regla que el mapa vacío:
+     * si no hay A, este punto es A; si ya hay A, se crea el
+     * tramo A -> este punto. Esto permite conectar dos puntos
+     * ya existentes directamente, sin pasar por un click libre
+     * intermedio. Además, es el único tipo de click válido
+     * justo después de borrar un tramo.
+     */
+
+    const handleMarkerClick =
+        useCallback(
+            (point: RoutePoint) => {
+                handlePointSelected(
+                    point,
+                    true
+                )
+            },
+            [
+                handlePointSelected,
+            ]
+        )
+
+    /*
+     * =====================================================
+     * ABRIR TRAMO (clic en la línea dibujada)
+     * =====================================================
+     *
+     * Solo sirve para ver/editar el tramo en el panel.
+     * No toca pendingFrom bajo ningún concepto: mirar un
+     * tramo no debe interrumpir un punto A que ya tengas
+     * pendiente.
+     */
+
+    const handleOpenSegment =
         useCallback(
             (segmentId: string) => {
+                setSaveError(null)
+                setSavedRouteName(null)
                 setSelectedSegmentId(
                     segmentId
                 )
@@ -498,74 +1164,55 @@ function CreateRoutePage() {
 
     /*
      * =====================================================
-     * GOMA MÁGICA
-     *
-     * Borra el tramo completo seleccionado.
+     * SELECCIONAR TRAMO DESDE EL PANEL LATERAL
      * =====================================================
+     *
+     * Igual que handleOpenSegment: solo abre/cierra las
+     * opciones de edición del tramo, nunca toca pendingFrom.
      */
 
-    const handleDeleteSegment =
-        useCallback(() => {
-            if (
-                !selectedSegmentId
-            ) {
-                return
-            }
-
-            setSegments(
-                (previous) =>
-                    previous.filter(
-                        (segment) =>
-                            segment.id !==
-                            selectedSegmentId
-                    )
-            )
-
-            setSelectedSegmentId(null)
-
-            setEraserMode(false)
-        }, [selectedSegmentId])
+    const handleSelectSegment =
+        useCallback(
+            (segmentId: string) => {
+                setSelectedSegmentId(
+                    (current) =>
+                        current ===
+                            segmentId
+                            ? null
+                            : segmentId
+                )
+            },
+            []
+        )
 
     /*
      * =====================================================
-     * ACTUALIZAR OPCIONES DEL TRAMO
+     * ACTUALIZAR TRAMO
      * =====================================================
      */
 
-    const updateSelectedSegment =
+    const updateSegment =
         useCallback(
             (
+                segmentId: string,
                 changes: Partial<RouteSegment>
             ) => {
-                if (
-                    !selectedSegmentId
-                ) {
-                    return
-                }
-
                 setSegments(
                     (previous) =>
                         previous.map(
                             (segment) =>
                                 segment.id ===
-                                selectedSegmentId
+                                    segmentId
                                     ? {
-                                          ...segment,
-                                          ...changes,
-                                      }
+                                        ...segment,
+                                        ...changes,
+                                    }
                                     : segment
                         )
                 )
             },
-            [selectedSegmentId]
+            []
         )
-
-    const selectedSegment =
-        segments.find(
-            (segment) =>
-                segment.id ===
-                selectedSegmentId
-        ) ?? null
 
     /*
      * =====================================================
@@ -574,37 +1221,52 @@ function CreateRoutePage() {
      */
 
     const handleClearAll =
-        useCallback(() => {
-            setCurrentPoints([])
+        useCallback(
+            () => {
+                if (
+                    segments.length === 0
+                ) {
+                    return
+                }
 
-            setSegments([])
+                const confirmed =
+                    window.confirm(
+                        '¿Seguro que quieres borrar todos los tramos? Esta acción no se puede deshacer.'
+                    )
 
-            setSelectedSegmentId(null)
+                if (!confirmed) {
+                    return
+                }
 
-            setEraserMode(false)
-
-            setSavedRouteName(null)
-
-            setSaveError(null)
-        }, [])
+                setSegments([])
+                setPendingFrom(null)
+                setSelectedSegmentId(
+                    null
+                )
+                setRequireExistingPointAfterDelete(
+                    false
+                )
+                setSavedRouteName(null)
+                setSaveError(null)
+            },
+            [
+                segments.length,
+            ]
+        )
 
     /*
      * =====================================================
-     * SALIR DEL MODO EDICIÓN
+     * SALIR
      * =====================================================
      */
 
     const handleExitEditor =
-        useCallback(() => {
-            /*
-             * De momento volvemos a la pantalla
-             * anterior mediante history.
-             *
-             * Si luego quieres navegación React Router,
-             * aquí metemos navigate(-1).
-             */
-            window.history.back()
-        }, [])
+        useCallback(
+            () => {
+                window.history.back()
+            },
+            []
+        )
 
     /*
      * =====================================================
@@ -612,134 +1274,241 @@ function CreateRoutePage() {
      * =====================================================
      */
 
-    const submitRoute = () => {
-        if (
-            segments.length === 0 &&
-            currentPoints.length < 2
-        ) {
-            setSaveError(
-                'Dibuja al menos un tramo antes de guardar la ruta.'
-            )
-
-            return
-        }
-
-        /*
-         * Si queda un dibujo sin terminar,
-         * avisamos al usuario.
-         */
-        if (
-            currentPoints.length >= 2
-        ) {
-            setSaveError(
-                'Tienes un tramo sin terminar. Termínalo antes de guardar la ruta.'
-            )
-
-            return
-        }
-
-        /*
-         * Para mantener compatibilidad con
-         * tu CreateMountainRoute actual,
-         * juntamos los puntos de todos los tramos.
-         *
-         * Después ampliaremos el backend para enviar
-         * directamente "segments".
-         */
-        const track =
-            segments.flatMap(
-                (segment) =>
-                    segment.points
-            )
-
-        const payload: CreateMountainRoute = {
-            name:
-                form.name.trim(),
-
-            distanceKm:
-                Number(
-                    form.distanceKm
-                ) ||
-                totalDistanceMeters /
-                    1000,
-
-            elevationGain:
-                Number(
-                    form.elevationGain
-                ),
-
-            totalTimeMinutes:
-                Number(
-                    form.totalTimeMinutes
-                ) ||
-                Math.round(
-                    totalDurationSeconds /
-                        60
-                ),
-
-            movingTimeMinutes:
-                Number(
-                    form.movingTimeMinutes
-                ),
-
-            criticalSection:
-                form.criticalSection,
-
-            personalRecommendations:
-                form.personalRecommendations
-                    .trim() ||
-                null,
-
-            track,
-        }
-
-        setSaving(true)
-
-        setSaveError(null)
-
-        createRoute(payload)
-            .then((created) => {
-                setSavedRouteName(
-                    created.name
+    const submitRoute =
+        () => {
+            if (
+                segments.length ===
+                0
+            ) {
+                setSaveError(
+                    'Selecciona al menos dos puntos para crear una ruta.'
                 )
 
-                setForm(
-                    initialForm
+                return
+            }
+
+            /*
+             * Nunca guardamos mientras haya cálculos
+             * pendientes.
+             */
+
+            const loading =
+                segments.some(
+                    (segment) =>
+                        segment.routingLoading
                 )
 
-                setCurrentPoints([])
+            if (loading) {
+                setSaveError(
+                    'Espera a que termine de calcularse la ruta.'
+                )
 
-                setSegments([])
+                return
+            }
+
+            /*
+             * Si hay un punto pendiente significa que
+             * el usuario ha empezado un tramo pero todavía
+             * no ha seleccionado el punto B.
+             */
+
+            if (
+                pendingFrom
+            ) {
+                setSaveError(
+                    'Has seleccionado un punto inicial pero falta el punto final.'
+                )
+
+                return
+            }
+
+            /*
+             * Todavía hace falta que el usuario elija con
+             * qué punto existente reconectar tras un borrado.
+             */
+
+            if (
+                requireExistingPointAfterDelete
+            ) {
+                setSaveError(
+                    'Selecciona un punto existente para continuar la ruta antes de guardar.'
+                )
+
+                return
+            }
+
+            /*
+             * =============================================
+             * NOMBRES
+             * =============================================
+             */
+
+            const segmentWithoutName =
+                segments.find(
+                    (segment) =>
+                        !segment.name.trim()
+                )
+
+            if (
+                segmentWithoutName
+            ) {
+                setSaveError(
+                    'Todos los tramos deben tener un nombre.'
+                )
 
                 setSelectedSegmentId(
-                    null
+                    segmentWithoutName.id
                 )
 
-                setDrawing(true)
-            })
-            .catch((error) => {
-                console.error(
-                    'Error creando la ruta:',
-                    error
+                return
+            }
+
+            /*
+             * =============================================
+             * VALIDAR CONTINUIDAD
+             * =============================================
+             */
+
+            const continuityError =
+                validateRouteContinuity(
+                    segments
                 )
 
+            if (
+                continuityError
+            ) {
                 setSaveError(
-                    error instanceof
-                        Error
-                        ? error.message
-                        : 'Error creando la ruta.'
+                    continuityError
                 )
-            })
-            .finally(() =>
-                setSaving(false)
+
+                return
+            }
+
+            /*
+             * =============================================
+             * CREAR TRACK CONTINUO
+             * =============================================
+             */
+
+            const track =
+                buildContinuousTrack(
+                    segments
+                )
+
+            if (
+                track.length < 2
+            ) {
+                setSaveError(
+                    'No se ha podido obtener el recorrido calculado.'
+                )
+
+                return
+            }
+
+            /*
+             * =============================================
+             * PAYLOAD
+             * =============================================
+             */
+
+            const payload:
+                CreateMountainRoute = {
+                name:
+                    form.name.trim(),
+
+                distanceKm:
+                    Number(
+                        form.distanceKm
+                    ) ||
+                    totalDistanceMeters /
+                    1000,
+
+                elevationGain:
+                    Number(
+                        form.elevationGain
+                    ),
+
+                totalTimeMinutes:
+                    Number(
+                        form.totalTimeMinutes
+                    ) ||
+                    Math.round(
+                        totalDurationSeconds /
+                        60
+                    ),
+
+                movingTimeMinutes:
+                    Number(
+                        form.movingTimeMinutes
+                    ),
+
+                criticalSection:
+                    form.criticalSection,
+
+                personalRecommendations:
+                    form.personalRecommendations
+                        .trim() ||
+                    null,
+
+                track,
+            }
+
+            setSaving(true)
+            setSaveError(null)
+
+            createRoute(
+                payload
             )
-    }
+                .then(
+                    (created) => {
+                        setSavedRouteName(
+                            created.name
+                        )
+
+                        setForm(
+                            initialForm
+                        )
+
+                        setSegments(
+                            []
+                        )
+
+                        setPendingFrom(
+                            null
+                        )
+
+                        setSelectedSegmentId(
+                            null
+                        )
+                    }
+                )
+                .catch(
+                    (error) => {
+                        console.error(
+                            'Error creando la ruta:',
+                            error
+                        )
+
+                        setSaveError(
+                            error instanceof
+                                Error
+                                ? error.message
+                                : 'Error creando la ruta.'
+                        )
+                    }
+                )
+                .finally(
+                    () =>
+                        setSaving(
+                            false
+                        )
+                )
+        }
 
     const handleSubmit = (
         event: SyntheticEvent<HTMLFormElement>
     ) => {
         event.preventDefault()
-
         submitRoute()
     }
 
@@ -765,91 +1534,24 @@ function CreateRoutePage() {
                     zoom={13}
                     className="h-full w-full"
                 >
+
                     <TileLayer
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
 
-                    {/* =========================================
-                        DIBUJO ACTUAL
-                    ========================================= */}
-
-                    <RouteDrawing
-                        active={
-                            drawing &&
-                            !eraserMode
+                    <MapClickHandler
+                        disabled={
+                            saving ||
+                            requireExistingPointAfterDelete
                         }
-                        points={
-                            currentPoints
-                        }
-                        onChange={
-                            setCurrentPoints
+                        onMapClick={
+                            handleMapClick
                         }
                     />
 
                     {/* =========================================
-                        TRAMOS YA CREADOS
-                    ========================================= */}
-
-                    {segments.map(
-                        (segment) => {
-                            const positions =
-                                segment.points.map(
-                                    (
-                                        point
-                                    ) =>
-                                        [
-                                            point.latitude,
-                                            point.longitude,
-                                        ] as [
-                                            number,
-                                            number
-                                        ]
-                                )
-
-                            const isSelected =
-                                segment.id ===
-                                selectedSegmentId
-
-                            return (
-                                <Polyline
-                                    key={
-                                        segment.id
-                                    }
-                                    positions={
-                                        positions
-                                    }
-                                    pathOptions={{
-                                        color:
-                                            isSelected
-                                                ? '#2563eb'
-                                                : '#111827',
-
-                                        weight:
-                                            isSelected
-                                                ? 8
-                                                : 5,
-
-                                        opacity:
-                                            isSelected
-                                                ? 1
-                                                : 0.8,
-                                    }}
-                                    eventHandlers={{
-                                        click:
-                                            () => {
-                                                handleSelectSegment(
-                                                    segment.id
-                                                )
-                                            },
-                                    }}
-                                />
-                            )
-                        }
-                    )}
-
-                    {/* =========================================
-                        RUTAS CALCULADAS POR ITINERO
+                        RUTAS CALCULADAS
                     ========================================= */}
 
                     {segments.map(
@@ -857,161 +1559,242 @@ function CreateRoutePage() {
                             segment
                                 .routingShape
                                 .length >
-                                1 && (
+                            1 && (
                                 <Polyline
-                                    key={`routing-${segment.id}`}
-                                    positions={segment.routingShape.map(
-                                        (
-                                            point
-                                        ) =>
-                                            [
-                                                point.latitude,
-                                                point.longitude,
-                                            ] as [
-                                                number,
-                                                number
-                                            ]
-                                    )}
+                                    key={
+                                        segment.id
+                                    }
+
+                                    positions={
+                                        segment.routingShape.map(
+                                            (
+                                                point
+                                            ) =>
+                                                [
+                                                    point.latitude,
+                                                    point.longitude,
+                                                ] as [
+                                                    number,
+                                                    number
+                                                ]
+                                        )
+                                    }
+
                                     pathOptions={{
                                         color:
-                                            '#ef4444',
+                                            segment.id ===
+                                                selectedSegmentId
+                                                ? '#2563eb'
+                                                : '#ef4444',
 
-                                        weight: 4,
+                                        weight:
+                                            segment.id ===
+                                                selectedSegmentId
+                                                ? 8
+                                                : 5,
 
-                                        opacity: 0.75,
+                                        opacity:
+                                            0.85,
+                                    }}
 
-                                        dashArray:
-                                            '8 8',
+                                    /*
+                                     * MUY IMPORTANTE:
+                                     *
+                                     * El click de la Polyline no
+                                     * se propaga al mapa.
+                                     */
+
+                                    bubblingMouseEvents={
+                                        false
+                                    }
+
+                                    eventHandlers={{
+                                        click: () => {
+                                            handleOpenSegment(
+                                                segment.id
+                                            )
+                                        },
                                     }}
                                 />
                             )
                     )}
+
+                    {/* =========================================
+                        PUNTO A PENDIENTE
+                    ========================================= */}
+
+                    {pendingFrom && (
+                        <CircleMarker
+                            center={[
+                                pendingFrom.latitude,
+                                pendingFrom.longitude,
+                            ]}
+
+                            radius={
+                                9
+                            }
+
+                            pathOptions={{
+                                color: '#15803d',
+                                fillColor: '#22c55e',
+                                fillOpacity: 1,
+                                weight: 3,
+                            }}
+
+                            bubblingMouseEvents={
+                                false
+                            }
+
+                            eventHandlers={{
+                                click: (
+                                    event
+                                ) => {
+                                    /*
+                                     * Este marcador ES el punto A
+                                     * pendiente. No hace falta
+                                     * volver a clicarlo para nada,
+                                     * simplemente evitamos que el
+                                     * click se propague al mapa.
+                                     */
+                                    event.originalEvent.stopPropagation()
+                                },
+                            }}
+                        />
+                    )}
+
+                    {/* =========================================
+                        PUNTOS A/B DE CADA TRAMO
+                    ========================================= */}
+
+                    {segments.map(
+                        (
+                            segment
+                        ) => (
+                            <Fragment
+                                key={
+                                    `points-${segment.id}`
+                                }
+                            >
+
+                                {/* =============================
+                                    PUNTO A
+                                ============================= */}
+
+                                <CircleMarker
+                                    center={[
+                                        segment.from.latitude,
+                                        segment.from.longitude,
+                                    ]}
+
+                                    radius={
+                                        7
+                                    }
+
+                                    pathOptions={{
+                                        color: '#16a34a',
+                                        fillColor: '#22c55e',
+                                        fillOpacity: 1,
+                                        weight: 3,
+                                    }}
+
+                                    bubblingMouseEvents={
+                                        false
+                                    }
+
+                                    eventHandlers={{
+                                        click: (
+                                            event
+                                        ) => {
+                                            event.originalEvent.stopPropagation()
+
+                                            handleMarkerClick(
+                                                segment.from
+                                            )
+                                        },
+                                    }}
+                                />
+
+                                {/* =============================
+                                    PUNTO B
+                                ============================= */}
+
+                                <CircleMarker
+                                    center={[
+                                        segment.to.latitude,
+                                        segment.to.longitude,
+                                    ]}
+
+                                    radius={
+                                        7
+                                    }
+
+                                    pathOptions={{
+                                        color: '#dc2626',
+                                        fillColor: '#ef4444',
+                                        fillOpacity: 1,
+                                        weight: 3,
+                                    }}
+
+                                    bubblingMouseEvents={
+                                        false
+                                    }
+
+                                    eventHandlers={{
+                                        click: (
+                                            event
+                                        ) => {
+                                            event.originalEvent.stopPropagation()
+
+                                            handleMarkerClick(
+                                                segment.to
+                                            )
+                                        },
+                                    }}
+                                />
+
+                            </Fragment>
+                        )
+                    )}
+
                 </MapContainer>
 
                 {/* =================================================
-                    BARRA DE HERRAMIENTAS
+                    MENSAJE DE ESTADO DEL MAPA
                 ================================================= */}
 
-                <div className="absolute left-4 right-4 top-4 z-[1000] flex flex-wrap items-center gap-2">
+                <div className="absolute left-1/2 top-4 z-[1000] -translate-x-1/2 rounded-xl bg-white px-4 py-2 text-center text-sm font-semibold text-gray-800 shadow-lg">
 
-                    {/* SALIR */}
+                    {requireExistingPointAfterDelete
+                        ? '🔗 Selecciona un punto existente para continuar la ruta'
+                        : !pendingFrom
+                            ? '📍 Haz clic para colocar el punto A'
+                            : '📍 Ahora coloca el punto B'}
 
-                    <button
-                        type="button"
-                        onClick={
-                            handleExitEditor
-                        }
-                        className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-lg font-bold shadow"
-                        title="Salir"
-                    >
-                        ×
-                    </button>
-
-                    {/* DIBUJAR */}
-
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setEraserMode(
-                                false
-                            )
-
-                            setDrawing(
-                                true
-                            )
-                        }}
-                        className={`rounded-lg px-3 py-2 text-sm font-semibold shadow ${
-                            drawing &&
-                            !eraserMode
-                                ? 'bg-gray-900 text-white'
-                                : 'bg-white text-gray-800'
-                        }`}
-                    >
-                        ✏️ Dibujar tramo
-                    </button>
-
-                    {/* TERMINAR */}
-
-                    {currentPoints.length >=
-                        2 && (
-                        <button
-                            type="button"
-                            onClick={
-                                finishCurrentSegment
-                            }
-                            className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow"
-                        >
-                            ✓ Terminar tramo
-                        </button>
-                    )}
-
-                    {/* DESHACER */}
-
-                    <button
-                        type="button"
-                        onClick={
-                            handleUndo
-                        }
-                        disabled={
-                            currentPoints.length ===
-                            0
-                        }
-                        className="rounded-lg bg-white px-3 py-2 text-sm font-semibold shadow disabled:opacity-50"
-                    >
-                        ↶
-                    </button>
-
-                    {/* GOMA */}
-
-                    <button
-                        type="button"
-                        onClick={() =>
-                            setEraserMode(
-                                (active) =>
-                                    !active
-                            )
-                        }
-                        disabled={
-                            segments.length ===
-                            0
-                        }
-                        className={`rounded-lg px-3 py-2 text-sm font-semibold shadow ${
-                            eraserMode
-                                ? 'bg-red-600 text-white'
-                                : 'bg-white text-gray-800'
-                        } disabled:opacity-50`}
-                    >
-                        🧽 Goma
-                    </button>
-
-                    {/* BORRAR TODO */}
-
-                    <button
-                        type="button"
-                        onClick={
-                            handleClearAll
-                        }
-                        disabled={
-                            segments.length ===
-                                0 &&
-                            currentPoints.length ===
-                                0
-                        }
-                        className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-red-600 shadow disabled:opacity-50"
-                    >
-                        Borrar todo
-                    </button>
                 </div>
 
                 {/* =================================================
-                    MENSAJE GOMA
+                    AVISO DE RECONEXIÓN TRAS BORRAR
                 ================================================= */}
 
-                {eraserMode && (
-                    <div className="absolute bottom-4 left-1/2 z-[1000] -translate-x-1/2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-lg">
-                        Selecciona un tramo para eliminarlo
+                {requireExistingPointAfterDelete && (
+                    <div className="absolute bottom-4 left-1/2 z-[1000] -translate-x-1/2 rounded-xl bg-purple-700 px-4 py-2 text-center text-sm font-semibold text-white shadow-lg">
+                        🔗 Clica sobre un punto existente para continuar
                     </div>
                 )}
+
+                {/* =================================================
+                    CALCULANDO
+                ================================================= */}
+
+                {segments.some(
+                    (segment) =>
+                        segment.routingLoading
+                ) && (
+                        <div className="absolute bottom-4 left-1/2 z-[1000] -translate-x-1/2 rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-lg">
+                            🧭 Calculando ruta...
+                        </div>
+                    )}
+
             </div>
 
             {/* =================================================
@@ -1023,6 +1806,7 @@ function CreateRoutePage() {
                 <div className="flex items-start justify-between gap-3">
 
                     <div>
+
                         <h2 className="text-lg font-bold text-gray-800">
                             Nueva ruta
                         </h2>
@@ -1031,13 +1815,11 @@ function CreateRoutePage() {
                             {segments.length}{' '}
                             tramo
                             {segments.length ===
-                            1
+                                1
                                 ? ''
                                 : 's'}
-                            {' · '}
-                            {totalPoints}{' '}
-                            puntos
                         </p>
+
                     </div>
 
                     <button
@@ -1049,7 +1831,29 @@ function CreateRoutePage() {
                     >
                         ← Volver
                     </button>
+
                 </div>
+
+                {/* =================================================
+                    AVISO DE RECONEXIÓN TRAS BORRAR
+                ================================================= */}
+
+                {requireExistingPointAfterDelete && (
+                    <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-3">
+
+                        <div className="text-sm font-bold text-purple-800">
+                            Continuar ruta
+                        </div>
+
+                        <p className="mt-1 text-xs leading-relaxed text-purple-700">
+                            Has eliminado un tramo.
+                            Selecciona en el mapa uno de los
+                            puntos existentes para indicar desde
+                            dónde quieres continuar.
+                        </p>
+
+                    </div>
+                )}
 
                 {/* =================================================
                     RESUMEN
@@ -1057,331 +1861,411 @@ function CreateRoutePage() {
 
                 {segments.length >
                     0 && (
-                    <div className="mt-4 grid grid-cols-2 gap-2">
+                        <div className="mt-4 grid grid-cols-2 gap-2">
 
-                        <div className="rounded-lg bg-gray-50 p-3">
-                            <div className="text-xs text-gray-500">
-                                Distancia
+                            <div className="rounded-lg bg-gray-50 p-3">
+
+                                <div className="text-xs text-gray-500">
+                                    Distancia
+                                </div>
+
+                                <div className="mt-1 font-bold text-gray-800">
+                                    {(
+                                        totalDistanceMeters /
+                                        1000
+                                    ).toFixed(2)}{' '}
+                                    km
+                                </div>
+
                             </div>
 
-                            <div className="mt-1 font-bold text-gray-800">
-                                {(
-                                    totalDistanceMeters /
-                                    1000
-                                ).toFixed(2)}{' '}
-                                km
-                            </div>
-                        </div>
+                            <div className="rounded-lg bg-gray-50 p-3">
 
-                        <div className="rounded-lg bg-gray-50 p-3">
-                            <div className="text-xs text-gray-500">
-                                Tiempo
-                            </div>
+                                <div className="text-xs text-gray-500">
+                                    Tiempo
+                                </div>
 
-                            <div className="mt-1 font-bold text-gray-800">
-                                {Math.round(
-                                    totalDurationSeconds /
+                                <div className="mt-1 font-bold text-gray-800">
+                                    {Math.round(
+                                        totalDurationSeconds /
                                         60
-                                )}{' '}
-                                min
-                            </div>
-                        </div>
+                                    )}{' '}
+                                    min
+                                </div>
 
-                        <div className="col-span-2 rounded-lg bg-gray-50 p-3">
-                            <div className="text-xs text-gray-500">
-                                Elementos encontrados
                             </div>
 
-                            <div className="mt-1 font-bold text-gray-800">
-                                {
-                                    allFeatureIds.length
-                                }
+                            <div className="col-span-2 rounded-lg bg-gray-50 p-3">
+
+                                <div className="text-xs text-gray-500">
+                                    Elementos encontrados
+                                </div>
+
+                                <div className="mt-1 font-bold text-gray-800">
+                                    {
+                                        allFeatureIds.length
+                                    }
+                                </div>
+
                             </div>
+
                         </div>
-                    </div>
-                )}
+                    )}
 
                 {/* =================================================
                     TRAMOS
                 ================================================= */}
 
-                {segments.length >
-                    0 && (
+                {segments.length > 0 && (
                     <div className="mt-5">
 
-                        <h3 className="text-sm font-bold text-gray-800">
-                            Tramos
-                        </h3>
+                        <div className="flex items-center justify-between">
+
+                            <h3 className="text-sm font-bold text-gray-800">
+                                Tramos
+                            </h3>
+
+                            <button
+                                type="button"
+                                onClick={
+                                    handleClearAll
+                                }
+                                className="text-xs font-semibold text-red-600 hover:text-red-700"
+                            >
+                                Borrar todo
+                            </button>
+
+                        </div>
 
                         <div className="mt-2 space-y-2">
 
                             {segments.map(
                                 (
-                                    segment,
-                                    index
+                                    segment
                                 ) => {
+
                                     const selected =
                                         segment.id ===
                                         selectedSegmentId
 
                                     return (
-                                        <button
+                                        <div
                                             key={
                                                 segment.id
                                             }
-                                            type="button"
-                                            onClick={() =>
-                                                setSelectedSegmentId(
-                                                    segment.id
-                                                )
-                                            }
-                                            className={`w-full rounded-lg border p-3 text-left transition ${
-                                                selected
+                                        >
+
+                                            {/* =================================================
+                                                CABECERA
+                                            ================================================= */}
+
+                                            <div
+                                                onClick={() =>
+                                                    handleSelectSegment(
+                                                        segment.id
+                                                    )
+                                                }
+                                                className={`w-full cursor-pointer rounded-lg border p-3 text-left transition ${selected
                                                     ? 'border-blue-500 bg-blue-50'
                                                     : 'border-gray-200 bg-white hover:bg-gray-50'
-                                            }`}
-                                        >
-                                            <div className="flex items-center justify-between">
+                                                    }`}
+                                            >
 
-                                                <span className="font-semibold text-gray-800">
-                                                    Tramo{' '}
-                                                    {index +
-                                                        1}
-                                                </span>
+                                                <div className="flex items-center justify-between gap-2">
 
-                                                <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">
-                                                    {
-                                                        segment.difficulty
-                                                    }
-                                                </span>
+                                                    <div className="min-w-0 flex-1">
+
+                                                        <span className="font-semibold text-gray-800">
+                                                            {segment.name ||
+                                                                'Sin nombre'}
+                                                        </span>
+
+                                                    </div>
+
+                                                    <div className="flex shrink-0 items-center gap-2">
+
+                                                        <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">
+                                                            {
+                                                                segment.difficulty
+                                                            }
+                                                        </span>
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={(
+                                                                event
+                                                            ) => {
+                                                                event.stopPropagation()
+
+                                                                handleDeleteSegment(
+                                                                    segment.id
+                                                                )
+                                                            }}
+                                                            className="flex h-7 w-7 items-center justify-center rounded-full text-lg font-bold text-gray-400 transition hover:bg-red-100 hover:text-red-600"
+                                                            title="Eliminar tramo"
+                                                            aria-label="Eliminar tramo"
+                                                        >
+                                                            ×
+                                                        </button>
+
+                                                    </div>
+
+                                                </div>
+
+                                                {/* =================================================
+                                                    INFORMACIÓN
+                                                ================================================= */}
+
+                                                <div className="mt-2 text-xs text-gray-500">
+
+                                                    {segment.routingLoading
+                                                        ? '🧭 Calculando camino...'
+                                                        : segment.distanceMeters !== null
+                                                            ? `${(
+                                                                segment.distanceMeters /
+                                                                1000
+                                                            ).toFixed(2)} km`
+                                                            : 'Sin distancia'}
+
+                                                    {' · '}
+
+                                                    {segment.nearbyLoading
+                                                        ? 'Buscando elementos...'
+                                                        : `${segment.featureIds.length} elementos`}
+
+                                                </div>
+
+                                                {segment.error && (
+                                                    <div className="mt-2 text-xs text-red-600">
+                                                        {
+                                                            segment.error
+                                                        }
+                                                    </div>
+                                                )}
+
                                             </div>
 
-                                            <div className="mt-2 text-xs text-gray-500">
+                                            {/* =================================================
+                                                OPCIONES DEL TRAMO
+                                            ================================================= */}
 
-                                                {segment.distanceMeters !==
-                                                null
-                                                    ? `${(
-                                                          segment.distanceMeters /
-                                                          1000
-                                                      ).toFixed(
-                                                          2
-                                                      )} km`
-                                                    : 'Calculando distancia...'}
+                                            {selected && (
+                                                <div className="rounded-b-xl border border-t-0 border-blue-200 bg-blue-50 p-3">
 
-                                                {' · '}
+                                                    {/* NOMBRE */}
 
-                                                {segment.nearbyLoading
-                                                    ? 'Buscando elementos...'
-                                                    : `${segment.featureIds.length} elementos`}
-                                            </div>
+                                                    <label className="flex flex-col gap-1 text-sm text-gray-700">
 
-                                            {segment.routingLoading && (
-                                                <div className="mt-2 text-xs text-red-600">
-                                                    🧭 Calculando camino...
+                                                        Nombre del tramo
+
+                                                        <input
+                                                            type="text"
+                                                            required
+                                                            value={
+                                                                segment.name
+                                                            }
+                                                            onChange={(
+                                                                e
+                                                            ) =>
+                                                                updateSegment(
+                                                                    segment.id,
+                                                                    {
+                                                                        name:
+                                                                            e.target.value,
+                                                                    }
+                                                                )
+                                                            }
+                                                            placeholder="Ej. Subida al Montcau"
+                                                            className="rounded-lg border border-gray-300 bg-white px-3 py-2"
+                                                        />
+
+                                                    </label>
+
+                                                    {/* DIFICULTAD */}
+
+                                                    <label className="mt-3 flex flex-col gap-1 text-sm text-gray-700">
+
+                                                        Dificultad
+
+                                                        <select
+                                                            value={
+                                                                segment.difficulty
+                                                            }
+                                                            onChange={(
+                                                                e
+                                                            ) =>
+                                                                updateSegment(
+                                                                    segment.id,
+                                                                    {
+                                                                        difficulty:
+                                                                            e.target.value as RouteDifficulty,
+                                                                    }
+                                                                )
+                                                            }
+                                                            className="rounded-lg border border-gray-300 bg-white px-3 py-2"
+                                                        >
+
+                                                            {ROUTE_DIFFICULTIES.map(
+                                                                (
+                                                                    difficulty
+                                                                ) => (
+                                                                    <option
+                                                                        key={
+                                                                            difficulty
+                                                                        }
+                                                                        value={
+                                                                            difficulty
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            difficulty
+                                                                        }
+                                                                    </option>
+                                                                )
+                                                            )}
+
+                                                        </select>
+
+                                                    </label>
+
+                                                    {/* SECCIÓN CRÍTICA */}
+
+                                                    <label className="mt-3 flex flex-col gap-1 text-sm text-gray-700">
+
+                                                        Sección crítica
+
+                                                        <select
+                                                            value={
+                                                                segment.criticalSection
+                                                            }
+                                                            onChange={(
+                                                                e
+                                                            ) =>
+                                                                updateSegment(
+                                                                    segment.id,
+                                                                    {
+                                                                        criticalSection:
+                                                                            e.target.value as RouteCriticalSection,
+                                                                    }
+                                                                )
+                                                            }
+                                                            className="rounded-lg border border-gray-300 bg-white px-3 py-2"
+                                                        >
+
+                                                            {ROUTE_CRITICAL_SECTIONS.map(
+                                                                (
+                                                                    section
+                                                                ) => (
+                                                                    <option
+                                                                        key={
+                                                                            section
+                                                                        }
+                                                                        value={
+                                                                            section
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            section
+                                                                        }
+                                                                    </option>
+                                                                )
+                                                            )}
+
+                                                        </select>
+
+                                                    </label>
+
+                                                    {/* RECOMENDACIONES */}
+
+                                                    <label className="mt-3 flex flex-col gap-1 text-sm text-gray-700">
+
+                                                        Recomendaciones
+
+                                                        <textarea
+                                                            value={
+                                                                segment.personalRecommendations
+                                                            }
+                                                            onChange={(
+                                                                e
+                                                            ) =>
+                                                                updateSegment(
+                                                                    segment.id,
+                                                                    {
+                                                                        personalRecommendations:
+                                                                            e.target.value,
+                                                                    }
+                                                                )
+                                                            }
+                                                            rows={
+                                                                3
+                                                            }
+                                                            className="rounded-lg border border-gray-300 bg-white px-3 py-2"
+                                                        />
+
+                                                    </label>
+
+                                                    {/* ELEMENTOS */}
+
+                                                    <div className="mt-3 rounded-lg bg-white p-3">
+
+                                                        <div className="flex justify-between text-sm">
+
+                                                            <span className="text-gray-500">
+                                                                Elementos encontrados
+                                                            </span>
+
+                                                            <strong>
+                                                                {
+                                                                    segment.featureIds.length
+                                                                }
+                                                            </strong>
+
+                                                        </div>
+
+                                                        {segment.features.length > 0 && (
+                                                            <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+
+                                                                {segment.features.map(
+                                                                    (
+                                                                        feature
+                                                                    ) => (
+                                                                        <li
+                                                                            key={
+                                                                                feature.id
+                                                                            }
+                                                                            className="flex items-center justify-between gap-2 rounded-md bg-gray-50 px-2 py-1.5 text-xs text-gray-700"
+                                                                        >
+
+                                                                            <span className="min-w-0 truncate font-medium">
+                                                                                {feature.name ||
+                                                                                    'Sin nombre'}
+                                                                            </span>
+
+                                                                            <span className="shrink-0 rounded bg-white px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
+                                                                                {
+                                                                                    feature.type
+                                                                                }
+                                                                            </span>
+
+                                                                        </li>
+                                                                    )
+                                                                )}
+
+                                                            </ul>
+                                                        )}
+
+                                                    </div>
+
                                                 </div>
                                             )}
-                                        </button>
+
+                                        </div>
                                     )
                                 }
                             )}
-                        </div>
-                    </div>
-                )}
-
-                {/* =================================================
-                    OPCIONES DEL TRAMO
-                ================================================= */}
-
-                {selectedSegment && (
-                    <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-3">
-
-                        <div className="flex items-center justify-between">
-
-                            <h3 className="font-bold text-gray-800">
-                                Opciones del tramo
-                            </h3>
-
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    setSelectedSegmentId(
-                                        null
-                                    )
-                                }
-                                className="text-lg text-gray-500"
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        {/* DIFICULTAD */}
-
-                        <label className="mt-3 flex flex-col gap-1 text-sm text-gray-700">
-                            Dificultad
-
-                            <select
-                                value={
-                                    selectedSegment.difficulty
-                                }
-                                onChange={(e) =>
-                                    updateSelectedSegment(
-                                        {
-                                            difficulty:
-                                                e.target.value as RouteDifficulty,
-                                        }
-                                    )
-                                }
-                                className="rounded-lg border border-gray-300 bg-white px-3 py-2"
-                            >
-                                {ROUTE_DIFFICULTIES.map(
-                                    (
-                                        difficulty
-                                    ) => (
-                                        <option
-                                            key={
-                                                difficulty
-                                            }
-                                            value={
-                                                difficulty
-                                            }
-                                        >
-                                            {
-                                                difficulty
-                                            }
-                                        </option>
-                                    )
-                                )}
-                            </select>
-                        </label>
-
-                        {/* SECCIÓN CRÍTICA */}
-
-                        <label className="mt-3 flex flex-col gap-1 text-sm text-gray-700">
-                            Sección crítica
-
-                            <select
-                                value={
-                                    selectedSegment.criticalSection
-                                }
-                                onChange={(e) =>
-                                    updateSelectedSegment(
-                                        {
-                                            criticalSection:
-                                                e.target.value as RouteCriticalSection,
-                                        }
-                                    )
-                                }
-                                className="rounded-lg border border-gray-300 bg-white px-3 py-2"
-                            >
-                                {ROUTE_CRITICAL_SECTIONS.map(
-                                    (
-                                        section
-                                    ) => (
-                                        <option
-                                            key={
-                                                section
-                                            }
-                                            value={
-                                                section
-                                            }
-                                        >
-                                            {
-                                                section
-                                            }
-                                        </option>
-                                    )
-                                )}
-                            </select>
-                        </label>
-
-                        {/* RECOMENDACIONES */}
-
-                        <label className="mt-3 flex flex-col gap-1 text-sm text-gray-700">
-                            Recomendaciones
-
-                            <textarea
-                                value={
-                                    selectedSegment.personalRecommendations
-                                }
-                                onChange={(e) =>
-                                    updateSelectedSegment(
-                                        {
-                                            personalRecommendations:
-                                                e.target.value,
-                                        }
-                                    )
-                                }
-                                rows={
-                                    3
-                                }
-                                className="rounded-lg border border-gray-300 bg-white px-3 py-2"
-                            />
-                        </label>
-
-                        {/* ELEMENTOS */}
-
-                        <div className="mt-3 rounded-lg bg-white p-3">
-
-                            <div className="flex justify-between text-sm">
-
-                                <span className="text-gray-500">
-                                    Elementos encontrados
-                                </span>
-
-                                <strong>
-                                    {
-                                        selectedSegment.featureIds
-                                            .length
-                                    }
-                                </strong>
-                            </div>
-
-                            {selectedSegment.features
-                                .length >
-                                0 && (
-                                <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto">
-
-                                    {selectedSegment.features.map(
-                                        (
-                                            feature
-                                        ) => (
-                                            <li
-                                                key={
-                                                    feature.id
-                                                }
-                                                className="flex items-center justify-between text-xs text-gray-700"
-                                            >
-                                                <span>
-                                                    {
-                                                        feature.name
-                                                    }
-                                                </span>
-
-                                                <span className="rounded bg-gray-100 px-1.5 py-0.5">
-                                                    {
-                                                        feature.type
-                                                    }
-                                                </span>
-                                            </li>
-                                        )
-                                    )}
-
-                                </ul>
-                            )}
 
                         </div>
 
-                        {/* BORRAR TRAMO */}
-
-                        <button
-                            type="button"
-                            onClick={
-                                handleDeleteSegment
-                            }
-                            className="mt-3 w-full rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow"
-                        >
-                            🧽 Eliminar este tramo
-                        </button>
                     </div>
                 )}
 
@@ -1397,12 +2281,15 @@ function CreateRoutePage() {
                 >
 
                     <div className="border-t border-gray-200 pt-4">
+
                         <h3 className="text-sm font-bold text-gray-800">
                             Información de la ruta
                         </h3>
+
                     </div>
 
                     <label className="flex flex-col gap-1 text-sm text-gray-700">
+
                         Nombre
 
                         <input
@@ -1419,9 +2306,11 @@ function CreateRoutePage() {
                             }
                             className="rounded-lg border border-gray-300 px-3 py-2"
                         />
+
                     </label>
 
                     <label className="flex flex-col gap-1 text-sm text-gray-700">
+
                         Distancia (km)
 
                         <input
@@ -1439,20 +2328,22 @@ function CreateRoutePage() {
                             }
                             placeholder={
                                 totalDistanceMeters >
-                                0
+                                    0
                                     ? (
-                                          totalDistanceMeters /
-                                          1000
-                                      ).toFixed(
-                                          2
-                                      )
+                                        totalDistanceMeters /
+                                        1000
+                                    ).toFixed(
+                                        2
+                                    )
                                     : ''
                             }
                             className="rounded-lg border border-gray-300 px-3 py-2"
                         />
+
                     </label>
 
                     <label className="flex flex-col gap-1 text-sm text-gray-700">
+
                         Desnivel positivo (m)
 
                         <input
@@ -1471,9 +2362,11 @@ function CreateRoutePage() {
                             }
                             className="rounded-lg border border-gray-300 px-3 py-2"
                         />
+
                     </label>
 
                     <label className="flex flex-col gap-1 text-sm text-gray-700">
+
                         Tiempo total (min)
 
                         <input
@@ -1491,20 +2384,22 @@ function CreateRoutePage() {
                             }
                             placeholder={
                                 totalDurationSeconds >
-                                0
+                                    0
                                     ? String(
-                                          Math.round(
-                                              totalDurationSeconds /
-                                                  60
-                                          )
-                                      )
+                                        Math.round(
+                                            totalDurationSeconds /
+                                            60
+                                        )
+                                    )
                                     : ''
                             }
                             className="rounded-lg border border-gray-300 px-3 py-2"
                         />
+
                     </label>
 
                     <label className="flex flex-col gap-1 text-sm text-gray-700">
+
                         Tiempo en movimiento (min)
 
                         <input
@@ -1522,9 +2417,11 @@ function CreateRoutePage() {
                             }
                             className="rounded-lg border border-gray-300 px-3 py-2"
                         />
+
                     </label>
 
                     <label className="flex flex-col gap-1 text-sm text-gray-700">
+
                         Sección crítica general
 
                         <select
@@ -1539,6 +2436,7 @@ function CreateRoutePage() {
                             }
                             className="rounded-lg border border-gray-300 px-3 py-2"
                         >
+
                             {ROUTE_CRITICAL_SECTIONS.map(
                                 (
                                     section
@@ -1557,10 +2455,13 @@ function CreateRoutePage() {
                                     </option>
                                 )
                             )}
+
                         </select>
+
                     </label>
 
                     <label className="flex flex-col gap-1 text-sm text-gray-700">
+
                         Recomendaciones generales
 
                         <textarea
@@ -1578,34 +2479,47 @@ function CreateRoutePage() {
                             }
                             className="rounded-lg border border-gray-300 px-3 py-2"
                         />
+
                     </label>
 
-                    {/* IDS QUE ACABAREMOS ENVIANDO AL BACKEND */}
+                    {/* =================================================
+                        IDS DE ELEMENTOS
+                    ================================================= */}
 
                     {allFeatureIds.length >
                         0 && (
-                        <div className="rounded-lg bg-gray-50 p-3">
+                            <div className="rounded-lg bg-gray-50 p-3">
 
-                            <div className="text-xs font-semibold text-gray-700">
-                                IDs de elementos detectados
+                                <div className="text-xs font-semibold text-gray-700">
+                                    IDs de elementos detectados
+                                </div>
+
+                                <div className="mt-1 break-all text-[11px] text-gray-500">
+                                    {
+                                        allFeatureIds.join(
+                                            ', '
+                                        )
+                                    }
+                                </div>
+
                             </div>
+                        )}
 
-                            <div className="mt-1 break-all text-[11px] text-gray-500">
-                                {
-                                    allFeatureIds.join(
-                                        ', '
-                                    )
-                                }
-                            </div>
-
-                        </div>
-                    )}
+                    {/* =================================================
+                        ERROR
+                    ================================================= */}
 
                     {saveError && (
                         <p className="text-sm text-red-600">
-                            {saveError}
+                            {
+                                saveError
+                            }
                         </p>
                     )}
+
+                    {/* =================================================
+                        GUARDADO CORRECTO
+                    ================================================= */}
 
                     {savedRouteName && (
                         <p className="text-sm text-emerald-700">
@@ -1617,12 +2531,26 @@ function CreateRoutePage() {
                         </p>
                     )}
 
+                    {/* =================================================
+                        GUARDAR
+                    ================================================= */}
+
                     <button
                         type="submit"
                         disabled={
                             saving ||
                             segments.length ===
-                                0
+                            0 ||
+                            requireExistingPointAfterDelete ||
+                            Boolean(
+                                pendingFrom
+                            ) ||
+                            segments.some(
+                                (
+                                    segment
+                                ) =>
+                                    segment.routingLoading
+                            )
                         }
                         className="mt-1 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white shadow disabled:opacity-50"
                     >
@@ -1632,7 +2560,9 @@ function CreateRoutePage() {
                     </button>
 
                 </form>
+
             </div>
+
         </div>
     )
 }
