@@ -1,9 +1,16 @@
+using System.IO.Compression;
 using Itinero;
 
 namespace CeleoxApi.Services;
 
 public class RoutingService
 {
+    private const string RouterDbFileName = "cataluna.routerdb";
+    private const string RouterDbZipFileName = "routerdb.zip";
+
+    private const string RouterDbDownloadUrl =
+        "https://github.com/dbel03/celeox/releases/download/routerdb-v1/routerdb.zip";
+
     private readonly RouterDb _routerDb;
 
     private RoutingService(RouterDb routerDb)
@@ -12,26 +19,46 @@ public class RoutingService
     }
 
     public static async Task<RoutingService> CreateAsync(
-        BackblazeService backblaze,
+        HttpClient httpClient,
         IWebHostEnvironment environment)
     {
         Console.WriteLine("======================================");
 
         var start = DateTime.UtcNow;
 
-        // En desarrollo usamos el fichero del proyecto.
-        // En producción usamos el almacenamiento temporal de Render.
-        var localPath = environment.IsDevelopment()
-            ? Path.Combine(
+        // ============================================================
+        // RUTAS
+        // ============================================================
+
+        string localPath;
+        string zipPath;
+
+        if (environment.IsDevelopment())
+        {
+            localPath = Path.Combine(
                 environment.ContentRootPath,
                 "Data",
                 "routing",
-                "cataluna.routerdb"
-            )
-            : Path.Combine(
-                Path.GetTempPath(),
-                "cataluna.routerdb"
+                RouterDbFileName
             );
+
+            zipPath = Path.Combine(
+                Path.GetTempPath(),
+                RouterDbZipFileName
+            );
+        }
+        else
+        {
+            localPath = Path.Combine(
+                Path.GetTempPath(),
+                RouterDbFileName
+            );
+
+            zipPath = Path.Combine(
+                Path.GetTempPath(),
+                RouterDbZipFileName
+            );
+        }
 
         RouterDb routerDb;
 
@@ -53,18 +80,7 @@ public class RoutingService
                 );
             }
 
-            await using var fileStream =
-                File.OpenRead(localPath);
-
-            using var memoryStream =
-                new MemoryStream();
-
-            await fileStream.CopyToAsync(memoryStream);
-
-            memoryStream.Position = 0;
-
-            routerDb =
-                RouterDb.Deserialize(memoryStream);
+            routerDb = await LoadRouterDbAsync(localPath);
         }
 
         // ============================================================
@@ -74,8 +90,7 @@ public class RoutingService
         else
         {
             // --------------------------------------------------------
-            // 2.1. Comprobar si ya tenemos el RouterDb en el
-            //      almacenamiento temporal de Render.
+            // 2.1. Comprobar si ya existe en /tmp
             // --------------------------------------------------------
 
             if (File.Exists(localPath))
@@ -83,76 +98,40 @@ public class RoutingService
                 Console.WriteLine(
                     $"Production: RouterDb encontrado localmente: {localPath}"
                 );
-
-                await using var fileStream =
-                    File.OpenRead(localPath);
-
-                using var memoryStream =
-                    new MemoryStream();
-
-                await fileStream.CopyToAsync(memoryStream);
-
-                memoryStream.Position = 0;
-
-                routerDb =
-                    RouterDb.Deserialize(memoryStream);
             }
-
-            // --------------------------------------------------------
-            // 2.2. Si no existe localmente, descargarlo de B2.
-            // --------------------------------------------------------
-
             else
             {
+                // ----------------------------------------------------
+                // 2.2. Descargar desde GitHub Release
+                // ----------------------------------------------------
+
                 Console.WriteLine(
                     "Production: RouterDb no encontrado localmente."
                 );
 
                 Console.WriteLine(
-                    "Production: descargando RouterDb desde Backblaze B2..."
+                    "Production: descargando RouterDb desde GitHub Release..."
                 );
 
-                await using var s3Stream =
-                    await backblaze.OpenReadAsync(
-                        "routing/cataluna.routerdb"
-                    );
-
-                // Guardamos una copia temporal en Render.
-                await using var fileStream =
-                    File.Create(localPath);
-
-                await s3Stream.CopyToAsync(fileStream);
-
-                Console.WriteLine(
-                    $"Production: RouterDb descargado y guardado en: {localPath}"
+                await DownloadRouterDbAsync(
+                    httpClient,
+                    zipPath,
+                    localPath
                 );
-
-                // ----------------------------------------------------
-                // 2.3. Cargar el fichero desde el almacenamiento local
-                //      y deserializarlo en memoria.
-                // ----------------------------------------------------
-
-                await using var localStream =
-                    File.OpenRead(localPath);
-
-                using var memoryStream =
-                    new MemoryStream();
-
-                await localStream.CopyToAsync(memoryStream);
-
-                memoryStream.Position = 0;
-
-                routerDb =
-                    RouterDb.Deserialize(memoryStream);
             }
+
+            // --------------------------------------------------------
+            // 2.3. Cargar RouterDb
+            // --------------------------------------------------------
+
+            routerDb = await LoadRouterDbAsync(localPath);
         }
 
         // ============================================================
-        // 3. RouterDb cargado en memoria
+        // 3. RouterDb cargado
         // ============================================================
 
-        var elapsed =
-            DateTime.UtcNow - start;
+        var elapsed = DateTime.UtcNow - start;
 
         Console.WriteLine(
             $"RouterDb cargado en memoria en {elapsed.TotalSeconds:F2}s"
@@ -162,6 +141,155 @@ public class RoutingService
 
         return new RoutingService(routerDb);
     }
+
+    // ================================================================
+    // DESCARGA + DESCOMPRESIÓN
+    // ================================================================
+
+    private static async Task DownloadRouterDbAsync(
+        HttpClient httpClient,
+        string zipPath,
+        string routerDbPath)
+    {
+        // Si quedó un ZIP incompleto de un intento anterior,
+        // lo eliminamos.
+        if (File.Exists(zipPath))
+        {
+            File.Delete(zipPath);
+        }
+
+        // Si quedó un RouterDb incompleto, también lo eliminamos.
+        if (File.Exists(routerDbPath))
+        {
+            File.Delete(routerDbPath);
+        }
+
+        using var response =
+            await httpClient.GetAsync(
+                RouterDbDownloadUrl,
+                HttpCompletionOption.ResponseHeadersRead
+            );
+
+        response.EnsureSuccessStatusCode();
+
+        Console.WriteLine(
+            $"Production: descarga iniciada. Tamaño: {response.Content.Headers.ContentLength / 1024.0 / 1024.0:F2} MB"
+        );
+
+        // ------------------------------------------------------------
+        // Descargar directamente a disco.
+        // NO usamos MemoryStream.
+        // ------------------------------------------------------------
+
+        await using (var networkStream =
+            await response.Content.ReadAsStreamAsync())
+        await using (var fileStream =
+            new FileStream(
+                zipPath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 1024 * 1024,
+                useAsync: true))
+        {
+            await networkStream.CopyToAsync(fileStream);
+        }
+
+        Console.WriteLine(
+            $"Production: ZIP descargado: {zipPath}"
+        );
+
+        // ------------------------------------------------------------
+        // Descomprimir
+        // ------------------------------------------------------------
+
+        Console.WriteLine(
+            "Production: descomprimiendo RouterDb..."
+        );
+
+        using (var archive =
+            ZipFile.OpenRead(zipPath))
+        {
+            var entry =
+                archive.GetEntry(RouterDbFileName);
+
+            if (entry == null)
+            {
+                throw new FileNotFoundException(
+                    $"El ZIP no contiene '{RouterDbFileName}'."
+                );
+            }
+
+            await using var entryStream =
+                entry.Open();
+
+            await using var outputStream =
+                new FileStream(
+                    routerDbPath,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.None,
+                    bufferSize: 1024 * 1024,
+                    useAsync: true
+                );
+
+            await entryStream.CopyToAsync(outputStream);
+        }
+
+        Console.WriteLine(
+            $"Production: RouterDb descomprimido: {routerDbPath}"
+        );
+
+        // ------------------------------------------------------------
+        // Borrar ZIP.
+        // Solo necesitamos el .routerdb.
+        // ------------------------------------------------------------
+
+        File.Delete(zipPath);
+
+        Console.WriteLine(
+            "Production: ZIP temporal eliminado."
+        );
+    }
+
+    // ================================================================
+    // CARGA DE ROUTERDB
+    // ================================================================
+
+    private static async Task<RouterDb> LoadRouterDbAsync(
+        string path)
+    {
+        Console.WriteLine(
+            $"Cargando RouterDb desde: {path}"
+        );
+
+        await using var fileStream =
+            new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 1024 * 1024,
+                useAsync: true
+            );
+
+        using var memoryStream =
+            new MemoryStream();
+
+        await fileStream.CopyToAsync(
+            memoryStream
+        );
+
+        memoryStream.Position = 0;
+
+        return RouterDb.Deserialize(
+            memoryStream
+        );
+    }
+
+    // ================================================================
+    // ROUTER
+    // ================================================================
 
     public Router CreateRouter()
     {

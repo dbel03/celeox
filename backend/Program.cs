@@ -28,18 +28,25 @@ builder.Services.Configure<BackblazeSettings>(
 
 builder.Services.AddSingleton<BackblazeService>();
 
+builder.Services.AddHttpClient();
+
 // RoutingService
 builder.Services.AddSingleton(sp =>
 {
-    var backblaze = sp.GetRequiredService<BackblazeService>();
-    var environment = sp.GetRequiredService<IWebHostEnvironment>();
+    var httpClientFactory =
+        sp.GetRequiredService<IHttpClientFactory>();
+
+    var environment =
+        sp.GetRequiredService<IWebHostEnvironment>();
 
     return RoutingService
-        .CreateAsync(backblaze, environment)
+        .CreateAsync(
+            httpClientFactory.CreateClient(),
+            environment
+        )
         .GetAwaiter()
         .GetResult();
 });
-
 builder.Services.AddScoped<MountainFeatureService>();
 
 
