@@ -639,6 +639,12 @@ function CreateRoutePage() {
     const [selectedSegmentId, setSelectedSegmentId] =
         useState<string | null>(null)
 
+    const [segmentPendingDelete, setSegmentPendingDelete] =
+        useState<string | null>(null)
+
+    const [confirmingClearAll, setConfirmingClearAll] =
+        useState(false)
+
     const [form, setForm] =
         useState<RouteFormState>(
             initialForm
@@ -727,6 +733,20 @@ function CreateRoutePage() {
     const handleDeleteSegment =
         useCallback(
             (segmentId: string) => {
+                setSegmentPendingDelete(segmentId)
+            },
+            []
+        )
+
+    const confirmDeleteSegment =
+        useCallback(
+            () => {
+                const segmentId = segmentPendingDelete
+
+                if (!segmentId) {
+                    return
+                }
+
                 setSegments(
                     (previous) => {
                         const remaining =
@@ -748,6 +768,15 @@ function CreateRoutePage() {
                 setSelectedSegmentId(null)
                 setSaveError(null)
                 setSavedRouteName(null)
+                setSegmentPendingDelete(null)
+            },
+            [segmentPendingDelete]
+        )
+
+    const cancelDeleteSegment =
+        useCallback(
+            () => {
+                setSegmentPendingDelete(null)
             },
             []
         )
@@ -1232,15 +1261,16 @@ function CreateRoutePage() {
                     return
                 }
 
-                const confirmed =
-                    window.confirm(
-                        '¿Seguro que quieres borrar todos los tramos? Esta acción no se puede deshacer.'
-                    )
+                setConfirmingClearAll(true)
+            },
+            [
+                segments.length,
+            ]
+        )
 
-                if (!confirmed) {
-                    return
-                }
-
+    const confirmClearAll =
+        useCallback(
+            () => {
                 setSegments([])
                 setPendingFrom(null)
                 setSelectedSegmentId(
@@ -1251,10 +1281,17 @@ function CreateRoutePage() {
                 )
                 setSavedRouteName(null)
                 setSaveError(null)
+                setConfirmingClearAll(false)
             },
-            [
-                segments.length,
-            ]
+            []
+        )
+
+    const cancelClearAll =
+        useCallback(
+            () => {
+                setConfirmingClearAll(false)
+            },
+            []
         )
 
     /*
@@ -1542,10 +1579,106 @@ function CreateRoutePage() {
         <div className="flex h-full w-full flex-col sm:flex-row">
 
             {/* =================================================
+                MODAL DE CONFIRMACIÓN - BORRAR TRAMO
+                ================================================= */}
+
+            {segmentPendingDelete && (
+                <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 px-4">
+
+                    <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+
+                        <h3 className="text-base font-bold text-gray-800">
+                            Borrar tramo
+                        </h3>
+
+                        <p className="mt-2 text-sm text-gray-600">
+                            ¿Seguro que quieres borrar el tramo{' '}
+                            <strong>
+                                "{
+                                    segments.find(
+                                        (segment) =>
+                                            segment.id === segmentPendingDelete
+                                    )?.name || 'sin nombre'
+                                }"
+                            </strong>
+                            ? Esta acción no se puede deshacer.
+                        </p>
+
+                        <div className="mt-5 flex justify-end gap-2">
+
+                            <button
+                                type="button"
+                                onClick={cancelDeleteSegment}
+                                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                            >
+                                Cancelar
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={confirmDeleteSegment}
+                                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                            >
+                                Borrar
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                </div>
+            )}
+
+            {/* =================================================
+                MODAL DE CONFIRMACIÓN - BORRAR TODO
+            ================================================= */}
+
+            {confirmingClearAll && (
+                <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 px-4">
+
+                    <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+
+                        <h3 className="text-base font-bold text-gray-800">
+                            Borrar todos los tramos
+                        </h3>
+
+                        <p className="mt-2 text-sm text-gray-600">
+                            ¿Seguro que quieres borrar los{' '}
+                            <strong>{segments.length}</strong> tramo
+                            {segments.length === 1 ? '' : 's'} de esta
+                            ruta? Esta acción no se puede deshacer.
+                        </p>
+
+                        <div className="mt-5 flex justify-end gap-2">
+
+                            <button
+                                type="button"
+                                onClick={cancelClearAll}
+                                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                            >
+                                Cancelar
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={confirmClearAll}
+                                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                            >
+                                Borrar todo
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                </div>
+            )}
+
+            {/* =================================================
                 MAPA
             ================================================= */}
 
-            <div className="relative h-64 w-full sm:h-full sm:flex-1">
+            <div className="relative w-full flex-1 min-h-0 sm:h-full sm:flex-1">
 
                 <MapView>
 
@@ -1824,8 +1957,7 @@ function CreateRoutePage() {
                 PANEL DERECHO
             ================================================= */}
 
-            <div className="w-full overflow-y-auto border-t border-gray-200 bg-white p-4 sm:h-full sm:w-96 sm:border-l sm:border-t-0">
-
+            <div className="w-full flex-none max-h-[35vh] overflow-y-auto border-t border-gray-200 bg-white p-4 sm:h-full sm:max-h-none sm:w-96 sm:border-l sm:border-t-0">
                 <div className="flex items-start justify-between gap-3">
 
                     <div>
