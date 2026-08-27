@@ -10,6 +10,10 @@ builder.Services.AddControllers();
 // Servicios
 builder.Services.AddSingleton<OsmService>();
 builder.Services.AddSingleton<MountainRouteService>();
+builder.Services.AddSingleton<BackblazeService>();
+builder.Services.AddSingleton<MongoDbContext>();
+builder.Services.AddSingleton<RoutingService>();
+builder.Services.AddScoped<MountainFeatureService>();
 
 // OpenAPI
 builder.Services.AddOpenApi();
@@ -19,61 +23,29 @@ builder.Services.Configure<MongoDbSettings>(
     builder.Configuration.GetSection("MongoDB")
 );
 
-builder.Services.AddSingleton<MongoDbContext>();
 
 // Backblaze B2
 builder.Services.Configure<BackblazeSettings>(
     builder.Configuration.GetSection("Backblaze")
 );
 
-builder.Services.AddSingleton<BackblazeService>();
 
 builder.Services.AddHttpClient();
 
-// RoutingService
-builder.Services.AddSingleton(sp =>
-{
-    var httpClientFactory =
-        sp.GetRequiredService<IHttpClientFactory>();
-
-    var environment =
-        sp.GetRequiredService<IWebHostEnvironment>();
-
-    return RoutingService
-        .CreateAsync(
-            httpClientFactory.CreateClient(),
-            environment
-        )
-        .GetAwaiter()
-        .GetResult();
-});
-builder.Services.AddScoped<MountainFeatureService>();
-
-
 var app = builder.Build();
-
-
-// ==========================================
-// Cargar RouterDb durante el arranque
-// ==========================================
 
 try
 {
-    _ = app.Services.GetRequiredService<RoutingService>();
+    var routingService = app.Services.GetRequiredService<RoutingService>();
+    var httpClient = app.Services.GetRequiredService<IHttpClientFactory>().CreateClient();
+    await routingService.LoadAsync(httpClient);
 
-    Console.WriteLine("======================================");
     Console.WriteLine("RouterDb cargado correctamente.");
-    Console.WriteLine("======================================");
 }
 catch (Exception ex)
 {
-    Console.WriteLine("======================================");
-    Console.WriteLine("AVISO: ROUTERDB NO DISPONIBLE");
-    Console.WriteLine("La API continuará arrancando sin routing.");
-    Console.WriteLine($"Motivo: {ex.Message}");
-    Console.WriteLine("======================================");
+    Console.WriteLine($"AVISO: ROUTERDB NO DISPONIBLE. Motivo: {ex.Message}");
 }
-
 
 // HTTP pipeline
 if (app.Environment.IsDevelopment())

@@ -63,3 +63,4 @@ secrets.json
 *.sap
 *.pbf
 *.routerdb
+*.zip

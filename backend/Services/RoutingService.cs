@@ -5,238 +5,86 @@ namespace CeleoxApi.Services;
 
 public class RoutingService : IDisposable
 {
+    private RouterDb? _routerDb;
+    private FileStream? _routerDbStream;
+
+    private readonly ReaderWriterLockSlim _lock = new();
+
     private const string RouterDbFileName = "cataluna.routerdb";
     private const string RouterDbZipFileName = "routerdb.zip";
 
     private const string RouterDbDownloadUrl =
         "https://github.com/dbel03/celeox/releases/download/routerdb-v1/routerdb.zip";
 
-    private readonly RouterDb _routerDb;
+    public bool IsReady => _routerDb is not null;
 
-    // IMPORTANTE:
-    // RouterDbProfile.NoCache necesita que el Stream permanezca abierto.
-    private FileStream? _routerDbStream;
-
-    private RoutingService(
-        RouterDb routerDb,
-        FileStream? routerDbStream)
+    public Router GetRouter()
     {
-        _routerDb = routerDb;
-        _routerDbStream = routerDbStream;
+        _lock.EnterReadLock();
+        try
+        {
+            if (_routerDb is null)
+                throw new InvalidOperationException("RouterDb no está cargado todavía.");
+
+            return new Router(_routerDb);
+        }
+        finally
+        {
+            _lock.ExitReadLock();
+        }
     }
 
-    public static async Task<RoutingService> CreateAsync(
-        HttpClient httpClient,
-        IWebHostEnvironment environment)
+    public async Task LoadAsync(HttpClient httpClient)
     {
-        Console.WriteLine("======================================");
+        var routerDbPath = Path.Combine(Path.GetTempPath(), RouterDbFileName);
 
-        var start = DateTime.UtcNow;
-
-        // ============================================================
-        // RUTAS
-        // ============================================================
-
-        string routerDbPath;
-        string zipPath;
-
-        if (environment.IsDevelopment())
-        {
-            routerDbPath = Path.Combine(
-                environment.ContentRootPath,
-                "Data",
-                "routing",
-                RouterDbFileName
-            );
-
-            zipPath = Path.Combine(
-                Path.GetTempPath(),
-                RouterDbZipFileName
-            );
-        }
-        else
-        {
-            routerDbPath = Path.Combine(
-                Path.GetTempPath(),
-                RouterDbFileName
-            );
-
-            zipPath = Path.Combine(
-                Path.GetTempPath(),
-                RouterDbZipFileName
-            );
-        }
-
-        // ============================================================
-        // 1. DEVELOPMENT
-        // ============================================================
-
-        if (environment.IsDevelopment())
+        if (!File.Exists(routerDbPath))
         {
             Console.WriteLine(
-                $"Development: cargando RouterDb local: {routerDbPath}"
+                $"Archivo no existe en TEMP, descargando..."
             );
-
-            if (!File.Exists(routerDbPath))
-            {
-                throw new FileNotFoundException(
-                    "No se encontró el RouterDb local.",
-                    routerDbPath
-                );
-            }
-
-            // En desarrollo también usamos NoCache.
-            // Esto permite probar localmente exactamente el mismo
-            // comportamiento que tendremos en Render.
-            var fileStream = new FileStream(
-                routerDbPath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                bufferSize: 1024 * 1024,
-                useAsync: true
-            );
-
-            try
-            {
-                var routerDb =
-                    RouterDb.Deserialize(
-                        fileStream,
-                        RouterDbProfile.NoCache
-                    );
-
-                Console.WriteLine(
-                    "Development: RouterDb cargado usando NoCache."
-                );
-
-                var elapsed =
-                    DateTime.UtcNow - start;
-
-                Console.WriteLine(
-                    $"RouterDb cargado en {elapsed.TotalSeconds:F2}s"
-                );
-
-                Console.WriteLine("======================================");
-
-                return new RoutingService(
-                    routerDb,
-                    fileStream
-                );
-            }
-            catch
-            {
-                await fileStream.DisposeAsync();
-                throw;
-            }
+            var zipPath = Path.Combine(Path.GetTempPath(), RouterDbZipFileName);
+            await DownloadRouterDbAsync(httpClient, zipPath, routerDbPath);
         }
 
-        // ============================================================
-        // 2. PRODUCTION
-        // ============================================================
-
-        // ------------------------------------------------------------
-        // 2.1. Comprobar si ya existe en /tmp
-        // ------------------------------------------------------------
-
-        if (File.Exists(routerDbPath))
-        {
-            Console.WriteLine(
-                $"Production: RouterDb encontrado localmente: {routerDbPath}"
-            );
-        }
-        else
-        {
-            Console.WriteLine(
-                "Production: RouterDb no encontrado localmente."
-            );
-
-            Console.WriteLine(
-                "Production: descargando RouterDb desde GitHub Release..."
-            );
-
-            await DownloadRouterDbAsync(
-                httpClient,
-                zipPath,
-                routerDbPath
-            );
-        }
-
-        // ============================================================
-        // 3. ABRIR FILESTREAM
-        // ============================================================
-
-        Console.WriteLine(
-            $"Production: cargando RouterDb desde: {routerDbPath}"
-        );
-
-        var productionFileStream = new FileStream(
-            routerDbPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 1024 * 1024,
-            useAsync: true
-        );
+        var fileStream = new FileStream(
+            routerDbPath, FileMode.Open, FileAccess.Read, FileShare.Read,
+            bufferSize: 1024 * 1024, useAsync: true);
 
         try
         {
-            // ========================================================
-            // IMPORTANTE:
-            //
-            // NO usamos:
-            //
-            // MemoryStream
-            // FileStream -> MemoryStream -> RouterDb
-            //
-            // Usamos directamente el FileStream con NoCache.
-            //
-            // Esto evita copiar los ~140 MB a RAM.
-            // ========================================================
+            // Carga completa en RAM (rápido, pero consume más memoria).
+            var loaded = RouterDb.Deserialize(fileStream);
 
-            var routerDb =
-                RouterDb.Deserialize(
-                    productionFileStream,
-                    RouterDbProfile.NoCache
-                );
+            //NoCache (lento, pero ligero en memoria).
+            // var loaded = RouterDb.Deserialize(fileStream, RouterDbProfile.NoCache);
 
-            Console.WriteLine(
-                "Production: RouterDb cargado usando NoCache."
-            );
+            _lock.EnterWriteLock();
+            try
+            {
+                _routerDbStream?.Dispose();
+                _routerDb = loaded;
 
-            var elapsed =
-                DateTime.UtcNow - start;
+                // Con carga en RAM el stream ya no hace falta mantenerlo abierto.
+                // Si vuelves a NoCache, descomenta la línea de abajo (necesita el stream vivo).
+                fileStream.Dispose();
 
-            Console.WriteLine(
-                $"RouterDb cargado en {elapsed.TotalSeconds:F2}s"
-            );
-
-            Console.WriteLine("======================================");
-
-            return new RoutingService(
-                routerDb,
-                productionFileStream
-            );
+                // _routerDbStream = fileStream;
+            }
+            finally { _lock.ExitWriteLock(); }
         }
         catch
         {
-            await productionFileStream.DisposeAsync();
+            await fileStream.DisposeAsync();
             throw;
         }
     }
-
-    // ================================================================
-    // DESCARGAR + DESCOMPRIMIR
-    // ================================================================
 
     private static async Task DownloadRouterDbAsync(
         HttpClient httpClient,
         string zipPath,
         string routerDbPath)
     {
-        // ------------------------------------------------------------
-        // Limpiar posibles restos de una descarga anterior
-        // ------------------------------------------------------------
-
         if (File.Exists(zipPath))
         {
             File.Delete(zipPath);
@@ -246,10 +94,6 @@ public class RoutingService : IDisposable
         {
             File.Delete(routerDbPath);
         }
-
-        // ------------------------------------------------------------
-        // Descargar ZIP directamente a disco
-        // ------------------------------------------------------------
 
         using var response =
             await httpClient.GetAsync(
@@ -265,13 +109,13 @@ public class RoutingService : IDisposable
         if (contentLength.HasValue)
         {
             Console.WriteLine(
-                $"Production: descarga iniciada. Tamaño: {contentLength.Value / 1024.0 / 1024.0:F2} MB"
+                $"Descarga iniciada. Tamaño: {contentLength.Value / 1024.0 / 1024.0:F2} MB"
             );
         }
         else
         {
             Console.WriteLine(
-                "Production: descarga iniciada. Tamaño desconocido."
+                "Descarga iniciada. Tamaño desconocido."
             );
         }
 
@@ -294,12 +138,8 @@ public class RoutingService : IDisposable
         }
 
         Console.WriteLine(
-            $"Production: ZIP descargado: {zipPath}"
+            $"ZIP descargado: {zipPath}"
         );
-
-        // ------------------------------------------------------------
-        // Descomprimir
-        // ------------------------------------------------------------
 
         Console.WriteLine(
             "Production: descomprimiendo RouterDb..."
@@ -310,14 +150,9 @@ public class RoutingService : IDisposable
                 ZipFile.OpenRead(zipPath))
         {
             var entry =
-                archive.GetEntry(RouterDbFileName);
-
-            if (entry == null)
-            {
-                throw new FileNotFoundException(
+                archive.GetEntry(RouterDbFileName) ?? throw new FileNotFoundException(
                     $"El ZIP no contiene '{RouterDbFileName}'."
                 );
-            }
 
             await using var entryStream =
                 entry.Open();
@@ -341,10 +176,6 @@ public class RoutingService : IDisposable
             $"Production: RouterDb descomprimido: {routerDbPath}"
         );
 
-        // ------------------------------------------------------------
-        // El ZIP ya no hace falta
-        // ------------------------------------------------------------
-
         File.Delete(zipPath);
 
         Console.WriteLine(
@@ -352,25 +183,10 @@ public class RoutingService : IDisposable
         );
     }
 
-    // ================================================================
-    // CREAR ROUTER
-    // ================================================================
-
-    public Router CreateRouter()
-    {
-        return new Router(_routerDb);
-    }
-
-    // ================================================================
-    // LIBERAR FILESTREAM
-    // ================================================================
-
     public void Dispose()
     {
-        if (_routerDbStream != null)
-        {
-            _routerDbStream.Dispose();
-            _routerDbStream = null;
-        }
+        Console.WriteLine("RoutingService.Dispose() llamado por el host.");
+        _routerDbStream?.Dispose();
+        _lock.Dispose();
     }
 }

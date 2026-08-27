@@ -17,12 +17,25 @@ public class RoutingController(
     public IActionResult Calculate(
         [FromBody] RouteCalculationRequest request)
     {
+        if (!_routingService.IsReady)
+            return StatusCode(503, "El servicio de rutas no está disponible temporalmente.");
+
         Console.WriteLine(
                 $"[ROUTING START] {DateTime.Now:HH:mm:ss.fff} " +
                 $"Thread={Environment.CurrentManagedThreadId}"
             );
 
-        var router = _routingService.CreateRouter();
+        Router router;
+
+        try
+        {
+            router = _routingService.GetRouter();
+        }
+        catch (InvalidOperationException)
+        {
+            return StatusCode(503, "El servicio de rutas no está disponible temporalmente.");
+        }
+
         var profile = Vehicle.Pedestrian.Fastest();
 
         var sourceResult = router.TryResolve(
@@ -33,7 +46,7 @@ public class RoutingController(
         var targetResult = router.TryResolve(
             profile,
             (float)request.To.Latitude,
-            (float)request.To.Longitude,500);
+            (float)request.To.Longitude, 500);
 
         Console.WriteLine("======================================");
         Console.WriteLine($"From: {request.From.Latitude}, {request.From.Longitude} -> IsError={sourceResult.IsError} ErrorMessage={sourceResult.ErrorMessage}");
@@ -67,7 +80,7 @@ public class RoutingController(
             $"[ROUTING END] {DateTime.Now:HH:mm:ss.fff} " +
             $"Thread={Environment.CurrentManagedThreadId}"
         );
-        
+
         Console.WriteLine(
             $"[ROUTING] From={request.From.Latitude},{request.From.Longitude} " +
             $"To={request.To.Latitude},{request.To.Longitude}"

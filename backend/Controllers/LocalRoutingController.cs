@@ -3,25 +3,24 @@ using Itinero;
 using Itinero.IO.Osm;
 using Itinero.Osm.Vehicles;
 using Microsoft.AspNetCore.Mvc;
+using System.IO.Compression;
 
 namespace CeleoxApi.Controllers;
 
 [ApiController]
 [Route("api/local/routing")]
 public class LocalRoutingController(
-    BackblazeService backblazeService,
-    IWebHostEnvironment environment) : ControllerBase
+        IWebHostEnvironment environment) : ControllerBase
 {
-    private readonly BackblazeService _backblazeService =
-        backblazeService;
-
     private readonly IWebHostEnvironment _environment =
         environment;
+
+    private const string RouterDbFileName = "cataluna.routerdb";
+    private const string RouterDbZipFileName = "routerdb.zip";
 
     [HttpPost("build")]
     public async Task<IActionResult> Build()
     {
-        // Este endpoint solo debe existir en Development.
         if (!_environment.IsDevelopment())
         {
             return NotFound();
@@ -42,10 +41,11 @@ public class LocalRoutingController(
 
         var routerDbPath = Path.Combine(
             routingDirectory,
-            "cataluna.routerdb");
+            RouterDbFileName);
 
-        const string b2ObjectKey =
-            "routing/cataluna.routerdb";
+        var zipPath = Path.Combine(
+            routingDirectory,
+            RouterDbZipFileName);
 
         if (!System.IO.File.Exists(osmPath))
         {
@@ -63,10 +63,8 @@ public class LocalRoutingController(
 
         var start = DateTime.UtcNow;
 
-        // Crear RouterDb vacío.
         var routerDb = new RouterDb();
 
-        // Leer el PBF y construir la red para peatones.
         await using (var osmStream = System.IO.File.OpenRead(osmPath))
         {
             routerDb.LoadOsmData(
@@ -75,8 +73,11 @@ public class LocalRoutingController(
         }
 
         Console.WriteLine("OSM procesado.");
-        
-        // Guardar RouterDb localmente.
+
+        routerDb.Compress();
+
+        Console.WriteLine("RouterDb comprimido y ordenado.");
+
         await using (var routerDbStream =
             System.IO.File.Create(routerDbPath))
         {
@@ -88,19 +89,23 @@ public class LocalRoutingController(
         Console.WriteLine(
             $"RouterDb generado: {fileInfo.Length / 1024d / 1024d:F2} MB");
 
-        // Subir el mismo fichero a Backblaze B2.
-        await using (var uploadStream =
-            System.IO.File.OpenRead(routerDbPath))
+        if (System.IO.File.Exists(zipPath))
         {
-            await _backblazeService.UploadAsync(
-                uploadStream,
-                b2ObjectKey,
-                "application/octet-stream");
+            System.IO.File.Delete(zipPath);
         }
+
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            archive.CreateEntryFromFile(routerDbPath, RouterDbFileName);
+        }
+
+        var zipInfo = new FileInfo(zipPath);
+
+        Console.WriteLine(
+            $"ZIP generado: {zipPath} ({zipInfo.Length / 1024d / 1024d:F2} MB)");
 
         var elapsed = DateTime.UtcNow - start;
 
-        Console.WriteLine("RouterDb subido a Backblaze B2.");
         Console.WriteLine(
             $"Tiempo total: {elapsed.TotalSeconds:F2}s");
         Console.WriteLine("======================================");
@@ -109,9 +114,12 @@ public class LocalRoutingController(
         {
             osmFile = osmPath,
             routerDbFile = routerDbPath,
-            backblazeKey = b2ObjectKey,
+            zipFile = zipPath,
             sizeMb = Math.Round(
                 fileInfo.Length / 1024d / 1024d,
+                2),
+            zipSizeMb = Math.Round(
+                zipInfo.Length / 1024d / 1024d,
                 2),
             elapsedSeconds = Math.Round(
                 elapsed.TotalSeconds,
