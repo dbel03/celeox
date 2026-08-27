@@ -21,6 +21,7 @@ import type { MountainFeature } from '../services/api'
 import type {
     RoutePoint,
     RouteSegment as RouteSegmentData,
+    CreateRouteSegment,
     RouteDifficulty,
     CreateMountainRoute,
     RouteCriticalSection,
@@ -1407,6 +1408,21 @@ function CreateRoutePage() {
                 return
             }
 
+            const createSegments: CreateRouteSegment[] =
+                segments.map((segment) => ({
+                    id: segment.id,
+                    name: segment.name.trim(),
+                    from: segment.from,
+                    to: segment.to,
+                    distanceMeters: segment.distanceMeters,
+                    durationSeconds: segment.durationSeconds,
+                    difficulty: segment.difficulty,
+                    criticalSection: segment.criticalSection,
+                    personalRecommendations:
+                        segment.personalRecommendations.trim() || null,
+                    featureIds: segment.featureIds,
+                }))
+
             /*
              * =============================================
              * PAYLOAD
@@ -1454,20 +1470,7 @@ function CreateRoutePage() {
 
                 track,
 
-                segments: segments.map((segment) => ({
-                    id: segment.id,
-                    name: segment.name.trim(),
-                    from: segment.from,
-                    to: segment.to,
-                    routingShape: segment.routingShape,
-                    distanceMeters: segment.distanceMeters,
-                    durationSeconds: segment.durationSeconds,
-                    difficulty: segment.difficulty,
-                    criticalSection: segment.criticalSection,
-                    personalRecommendations:
-                        segment.personalRecommendations.trim() || null,
-                    featureIds: segment.featureIds
-                })),
+                segments: createSegments,
             }
 
             setSaving(true)
@@ -2560,8 +2563,8 @@ function CreateRoutePage() {
                         </p>
                     )}
                     <p className="text-sm">
-                            Finaliza Dibujo antes de guardar ruta
-                        </p>
+                        Finaliza Dibujo antes de guardar ruta
+                    </p>
                     <button
                         type="submit"
                         disabled={

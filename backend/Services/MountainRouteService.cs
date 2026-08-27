@@ -367,21 +367,6 @@ public class MountainRouteService(MongoDbContext context)
         ValidatePoint(segment.To);
 
         if (
-            segment.RoutingShape == null ||
-            segment.RoutingShape.Count < 2
-        )
-        {
-            throw new ArgumentException(
-                $"El tramo '{segment.Name}' debe tener un recorrido calculado."
-            );
-        }
-
-        foreach (var point in segment.RoutingShape)
-        {
-            ValidatePoint(point);
-        }
-
-        if (
             segment.DistanceMeters.HasValue &&
             segment.DistanceMeters.Value < 0
         )

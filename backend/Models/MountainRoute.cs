@@ -74,9 +74,7 @@ public class RouteSegment
     public RoutePoint From { get; set; } = new();
 
     public RoutePoint To { get; set; } = new();
-
-    public List<RoutePoint> RoutingShape { get; set; } = [];
-
+    
     public double? DistanceMeters { get; set; }
 
     public double? DurationSeconds { get; set; }
