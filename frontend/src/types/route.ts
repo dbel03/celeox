@@ -26,6 +26,53 @@ export interface RoutePoint {
     longitude: number
 }
 
+export interface RouteSegment {
+    id: string
+    name: string
+    from: RoutePoint
+    to: RoutePoint
+    distanceMeters: number | null
+    durationSeconds: number | null
+    difficulty: RouteDifficulty
+    criticalSection: RouteCriticalSection
+    personalRecommendations?: string | null
+    featureIds: string[]
+}
+
+export const ROUTE_DIFFICULTIES = [
+    'Muy fácil',
+    'Fácil',
+    'Moderada',
+    'Difícil',
+    'Muy difícil',
+] as const
+
+export type RouteDifficulty =
+    (typeof ROUTE_DIFFICULTIES)[number]
+
+export interface RouteSegment {
+    id: string
+
+    name: string
+
+    from: RoutePoint
+
+    to: RoutePoint
+
+    routingShape: RoutePoint[]
+
+    distanceMeters: number | null
+
+    durationSeconds: number | null
+
+    difficulty: RouteDifficulty
+
+    criticalSection: RouteCriticalSection
+
+    personalRecommendations?: string | null
+
+    featureIds: string[]
+}
 
 /*
  * ============================================
@@ -55,6 +102,8 @@ export interface MountainRouteInput {
     personalRecommendations?: string | null
 
     track: RoutePoint[]
+
+    segments: RouteSegment[]
 }
 
 export type CreateMountainRoute = MountainRouteInput

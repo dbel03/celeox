@@ -20,43 +20,18 @@ import type { MountainFeature } from '../services/api'
 
 import type {
     RoutePoint,
+    RouteSegment as RouteSegmentData,
+    RouteDifficulty,
     CreateMountainRoute,
     RouteCriticalSection,
 } from '../types/route'
 
-import {
-    ROUTE_CRITICAL_SECTIONS,
-} from '../types/route'
+import { ROUTE_CRITICAL_SECTIONS, ROUTE_DIFFICULTIES } from '../types/route'
 
 import MapView from '../components/map/MapView'
 
-type RouteDifficulty =
-    | 'Muy fácil'
-    | 'Fácil'
-    | 'Moderada'
-    | 'Difícil'
-    | 'Muy difícil'
-
-const ROUTE_DIFFICULTIES: RouteDifficulty[] = [
-    'Muy fácil',
-    'Fácil',
-    'Moderada',
-    'Difícil',
-    'Muy difícil',
-]
-
-interface RouteSegment {
-    id: string
-    name: string
-    from: RoutePoint
-    to: RoutePoint
-    routingShape: RoutePoint[]
-    distanceMeters: number | null
-    durationSeconds: number | null
-    difficulty: RouteDifficulty
-    criticalSection: RouteCriticalSection
+interface RouteSegment extends RouteSegmentData {
     personalRecommendations: string
-    featureIds: string[]
     features: MountainFeature[]
     routingLoading: boolean
     nearbyLoading: boolean
@@ -709,6 +684,11 @@ function CreateRoutePage() {
             )
         )
 
+    const continuityError =
+        segments.length > 0 && !pendingFrom && !requireExistingPointAfterDelete
+            ? validateRouteContinuity(segments)
+            : null
+
     /*
      * =====================================================
      * FORM
@@ -1005,6 +985,8 @@ function CreateRoutePage() {
      * un click libre no puede decidir por el usuario cuál es
      * el punto A de reconexión.
      */
+    const isCalculating =
+        segments.some((segment) => segment.routingLoading)
 
     const handlePointSelected =
         useCallback(
@@ -1013,6 +995,10 @@ function CreateRoutePage() {
                 isExistingPoint: boolean
             ) => {
                 if (saving) {
+                    return
+                }
+
+                if (isCalculating) {
                     return
                 }
 
@@ -1086,6 +1072,7 @@ function CreateRoutePage() {
                 pendingFrom,
                 calculateSegment,
                 saving,
+                isCalculating,
                 requireExistingPointAfterDelete,
             ]
         )
@@ -1133,6 +1120,25 @@ function CreateRoutePage() {
             [
                 handlePointSelected,
             ]
+        )
+
+    /*
+    * =====================================================
+    * FINALIZAR DIBUJO
+    * =====================================================
+    *
+    * El último punto B se convierte automáticamente en el
+    * A del siguiente tramo (para poder encadenar). Esto
+    * permite decirle explícitamente al editor "no quiero
+    * continuar desde aquí", liberando pendingFrom para que
+    * el botón de guardar pueda activarse.
+    */
+    const handleFinishDrawing =
+        useCallback(
+            () => {
+                setPendingFrom(null)
+            },
+            []
         )
 
     /*
@@ -1447,6 +1453,21 @@ function CreateRoutePage() {
                     null,
 
                 track,
+
+                segments: segments.map((segment) => ({
+                    id: segment.id,
+                    name: segment.name.trim(),
+                    from: segment.from,
+                    to: segment.to,
+                    routingShape: segment.routingShape,
+                    distanceMeters: segment.distanceMeters,
+                    durationSeconds: segment.durationSeconds,
+                    difficulty: segment.difficulty,
+                    criticalSection: segment.criticalSection,
+                    personalRecommendations:
+                        segment.personalRecommendations.trim() || null,
+                    featureIds: segment.featureIds
+                })),
             }
 
             setSaving(true)
@@ -1533,11 +1554,10 @@ function CreateRoutePage() {
                     <MapClickHandler
                         disabled={
                             saving ||
+                            isCalculating ||
                             requireExistingPointAfterDelete
                         }
-                        onMapClick={
-                            handleMapClick
-                        }
+                        onMapClick={handleMapClick}
                     />
 
                     {/* =========================================
@@ -1761,6 +1781,16 @@ function CreateRoutePage() {
                             : '📍 Ahora coloca el punto B'}
 
                 </div>
+
+                {pendingFrom && segments.length > 0 && (
+                    <button
+                        type="button"
+                        onClick={handleFinishDrawing}
+                        className="fixed left-4 top-32 z-[1000] rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-emerald-700"
+                    >
+                        ✅ Finalizar dibujo aquí
+                    </button>
+                )}
 
                 {/* =================================================
                     AVISO DE RECONEXIÓN TRAS BORRAR
@@ -2524,23 +2554,23 @@ function CreateRoutePage() {
                     {/* =================================================
                         GUARDAR
                     ================================================= */}
-
+                    {continuityError && !saveError && (
+                        <p className="text-sm text-amber-600">
+                            {continuityError}
+                        </p>
+                    )}
+                    <p className="text-sm">
+                            Finaliza Dibujo antes de guardar ruta
+                        </p>
                     <button
                         type="submit"
                         disabled={
                             saving ||
-                            segments.length ===
-                            0 ||
+                            segments.length === 0 ||
                             requireExistingPointAfterDelete ||
-                            Boolean(
-                                pendingFrom
-                            ) ||
-                            segments.some(
-                                (
-                                    segment
-                                ) =>
-                                    segment.routingLoading
-                            )
+                            Boolean(pendingFrom) ||
+                            Boolean(continuityError) ||
+                            segments.some((segment) => segment.routingLoading)
                         }
                         className="mt-1 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white shadow disabled:opacity-50"
                     >
