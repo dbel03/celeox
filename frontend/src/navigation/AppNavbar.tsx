@@ -47,6 +47,7 @@ function AppNavbar({
                 type="button"
                 onClick={() => navigate('/')}
                 aria-label="Ir al inicio"
+                title="Inicio"
                 className="
                     pointer-events-auto
                     absolute
@@ -171,6 +172,7 @@ function AppNavbar({
                         type="button"
                         onClick={() => navigate('/')}
                         aria-label="Inicio"
+                        title="Inicio"
                         aria-current={
                             isHome
                                 ? 'page'
@@ -273,6 +275,7 @@ function AppNavbar({
                         type="button"
                         onClick={() => navigate('/map')}
                         aria-label="Mapa"
+                        title="Mapa"
                         aria-current={
                             isMap
                                 ? 'page'
@@ -371,6 +374,7 @@ function AppNavbar({
                         type="button"
                         onClick={() => navigate('/crear-ruta')}
                         aria-label="Crear ruta"
+                        title="Crear ruta"
                         aria-current={
                             isCreateRoute
                                 ? 'page'
@@ -440,15 +444,25 @@ function AppNavbar({
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                                 strokeWidth={2}
-                                d="M12 5v14M5 12h14"
+                                d="
+                                    M15.5 5.5
+                                    L18.5 8.5
+                                    M4 20
+                                    L4.5 16
+                                    L16.5 4
+                                    A2.121 2.121 0 0119.5 7
+                                    L7.5 19
+                                    L4 20
+                                    Z
+                                "
                             />
                         </svg>
-
-                    </button>
-
-                </div>
+                        
+                </button>
 
             </div>
+
+        </div>
 
         </nav>
     )
