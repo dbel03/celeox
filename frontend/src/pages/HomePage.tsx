@@ -1,9 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 
-import Header from './Header'
-import Footer from './Footer'
-
-import ExploreSection from '../components/home-sections/ExploreSection'
+import Header from '../components/home/Header'
+import Footer from '../components/home/Footer'
+import ExploreSection from '../components/home/ExploreSection'
 
 
 function Home() {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import AppNavbar from '../navigation/AppNavbar'
+import AppNavbar from '../components/map/MapNavbar'
 import MapView from '../components/map/MapView'
 
 

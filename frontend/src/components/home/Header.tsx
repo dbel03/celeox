@@ -1,4 +1,4 @@
-import { Celeox } from "../components/shared/Celeox"
+import { Celeox } from "../shared/Celeox"
 
 interface HeaderProps {
   onLogin?: () => void

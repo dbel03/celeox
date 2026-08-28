@@ -1,4 +1,4 @@
-import MapPreview from '../shared/MapPreview'
+import MapPreview from './MapPreview'
 
 
 const ExcursionGroups = [
