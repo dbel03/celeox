@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Menu, X } from 'lucide-react'
 
-function ExploreNavbar() {
+function AppNavbar() {
     const navigate = useNavigate()
     const [open, setOpen] = useState(false)
 
@@ -111,4 +111,4 @@ function ExploreNavbar() {
     )
 }
 
-export default ExploreNavbar
+export default AppNavbar

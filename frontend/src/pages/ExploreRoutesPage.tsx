@@ -1,94 +1,52 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
-import ExploreNavbar from '../components/shared/AppNavbar'
+import AppNavbar from '../components/shared/AppNavbar'
 import RoutesSearchBar from '../components/exploreRoutes/RouteSearchBar'
 import RoutesCarousel from '../components/exploreRoutes/RoutesCarousel'
 import TopRoutesSection from '../components/exploreRoutes/TopRoutesSection'
+import { getRoutes } from '../services/api'
 import type { MountainRoute } from '../types/route'
-
-const MockRoutes: MountainRoute[] = [
-    {
-        id: '1',
-        votes: 2,
-        name: 'Montcau clásica',
-        distanceKm: 9.2,
-        elevationGain: 620,
-        totalTimeMinutes: 210,
-        movingTimeMinutes: 180,
-        criticalSection: 'Sendero/Corriol',
-        personalRecommendations: 'Llevar bastones, tramo final resbaladizo con lluvia.',
-        track: [
-            { latitude: 41.612, longitude: 1.9 },
-            { latitude: 41.62, longitude: 1.91 },
-        ],
-        segments: [],
-        generalDifficulty: 'Moderada',
-        technique: 'Sendero marcado',
-        aerialExposure: 'Baja',
-        notRecommendedFor: 'Personas con vértigo en el tramo final',
-        recommendedMaterial: 'Botas de montaña, bastones',
-        createdAt: '2026-05-01T10:00:00Z',
-        updatedAt: '2026-05-01T10:00:00Z',
-    },
-    {
-        id: '2',
-        votes: 10,
-        name: 'Vallparadís río',
-        distanceKm: 4.5,
-        elevationGain: 120,
-        totalTimeMinutes: 90,
-        movingTimeMinutes: 75,
-        criticalSection: 'Pista',
-        personalRecommendations: null,
-        track: [
-            { latitude: 41.56, longitude: 2.01 },
-            { latitude: 41.565, longitude: 2.015 },
-        ],
-        segments: [],
-        generalDifficulty: 'Fácil',
-        technique: 'Pista ancha, apta para todos los públicos',
-        aerialExposure: 'Nula',
-        notRecommendedFor: null,
-        recommendedMaterial: 'Calzado cómodo',
-        createdAt: '2026-05-02T10:00:00Z',
-        updatedAt: '2026-05-02T10:00:00Z',
-    },
-    {
-        id: '3',
-        votes: 20,
-        name: 'Pirineos - Refugio',
-        distanceKm: 14,
-        elevationGain: 980,
-        totalTimeMinutes: 360,
-        movingTimeMinutes: 300,
-        criticalSection: 'Roca vertical aérea',
-        personalRecommendations: 'Salir temprano, tramo de roca requiere pies firmes.',
-        track: [
-            { latitude: 42.6, longitude: 0.9 },
-            { latitude: 42.62, longitude: 0.92 },
-        ],
-        segments: [],
-        generalDifficulty: 'Muy difícil',
-        technique: 'Trepada, exposición aérea en tramo final',
-        aerialExposure: 'Alta',
-        notRecommendedFor: 'Personas sin experiencia en trepada',
-        recommendedMaterial: 'Casco, arnés opcional, calzado técnico',
-        createdAt: '2026-05-03T10:00:00Z',
-        updatedAt: '2026-05-03T10:00:00Z',
-    },
-]
 
 function ExploreRoutesPage() {
     const [search, setSearch] = useState('')
+    const [routes, setRoutes] = useState<MountainRoute[]>([])
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
 
-    const filteredRoutes = MockRoutes.filter((route) =>
+    useEffect(() => {
+        let cancelled = false
+
+        const fetchRoutes = async () => {
+            setLoading(true)
+            setError(null)
+
+            try {
+                const data = await getRoutes()
+                if (!cancelled) setRoutes(data)
+            } catch (err) {
+                if (!cancelled) {
+                    setError(err instanceof Error ? err.message : 'Error desconocido')
+                }
+            } finally {
+                if (!cancelled) setLoading(false)
+            }
+        }
+
+        fetchRoutes()
+
+        return () => {
+            cancelled = true
+        }
+    }, [])
+
+    const filteredRoutes = routes.filter((route) =>
         route.name.toLowerCase().includes(search.toLowerCase())
     )
 
     return (
         <main className="flex min-h-dvh flex-col bg-slate-50">
 
-            <ExploreNavbar />
+            <AppNavbar />
 
             <div className="flex-1 px-6 py-10 lg:px-12">
 
@@ -96,9 +54,27 @@ function ExploreRoutesPage() {
 
                     <RoutesSearchBar value={search} onChange={setSearch} />
 
-                    <RoutesCarousel title="Todas las rutas" routes={filteredRoutes} />
+                    {error && (
+                        <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+                            No se han podido cargar las rutas: {error}
+                        </p>
+                    )}
 
-                    <TopRoutesSection routes={MockRoutes} />
+                    {loading ? (
+                        <p className="text-sm text-slate-500">Cargando rutas...</p>
+                    ) : (
+                        <>
+                            <div className="mx-auto w-full max-w-6xl">
+                                <RoutesCarousel
+                                    title="Todas las rutas"
+                                    routes={filteredRoutes.slice(0, 10)}
+                                />
+
+                                <TopRoutesSection routes={routes} />
+                            </div>
+
+                        </>
+                    )}
 
                 </div>
 

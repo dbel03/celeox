@@ -13,7 +13,19 @@ function RoutesCarousel({ title, routes }: RoutesCarouselProps) {
                 {title}
             </h3>
 
-            <div className="flex flex-col gap-4 sm:flex-row sm:overflow-x-auto sm:pb-2">
+            <div
+                className="
+                    grid
+                    grid-cols-1
+                    justify-items-center
+                    gap-4
+                    sm:grid-flow-col
+                    sm:grid-rows-2
+                    sm:justify-center
+                    sm:overflow-x-auto
+                    sm:pb-2
+                "
+            >
                 {routes.map((route) => (
                     <RouteCard key={route.id} route={route} />
                 ))}
