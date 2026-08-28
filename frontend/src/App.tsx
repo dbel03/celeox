@@ -7,6 +7,7 @@ import {
 import Home from './pages/HomePage'
 import MapPage from './pages/MapPage'
 import CreateRoutePage from './pages/CreateRoutePage'
+import ExploreRoutesPage from './pages/ExploreRoutesPage'
 
 
 function App() {
@@ -29,6 +30,11 @@ function App() {
         <Route
           path="/crear-ruta"
           element={<CreateRoutePage />}
+        />
+
+        <Route
+          path="/explore-routes"
+          element={<ExploreRoutesPage />}
         />
 
       </Routes>

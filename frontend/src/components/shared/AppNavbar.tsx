@@ -1,20 +1,9 @@
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 
 function ExploreNavbar() {
 
     const navigate = useNavigate()
-    const location = useLocation()
-
-    const isHome = location.pathname === '/'
-    const isMap = location.pathname === '/map'
-    const isRoutes = location.pathname === '/routes'
-
-    const navItems = [
-        { label: 'Inicio', path: '/', active: isHome },
-        { label: 'Mapa', path: '/map', active: isMap },
-        { label: 'Rutas', path: '/routes', active: isRoutes },
-    ]
 
     return (
         <nav
@@ -69,51 +58,13 @@ function ExploreNavbar() {
                     flex
                     items-center
                     gap-1
-                    rounded-full
-                    border
-                    border-slate-200
-                    bg-slate-50
                     p-1
                 "
             >
-
-                {navItems.map((item) => (
-
-                    <button
-                        key={item.path}
-                        type="button"
-                        onClick={() => navigate(item.path)}
-                        aria-current={item.active ? 'page' : undefined}
-                        className={`
-                            rounded-full
-                            px-4
-                            py-2
-                            text-sm
-                            font-medium
-                            transition
-
-                            ${item.active
-                                ? 'bg-slate-900 text-white shadow-sm'
-                                : 'text-slate-600 hover:bg-slate-100'
-                            }
-                        `}
-                    >
-                        {item.label}
-                    </button>
-
-                ))}
-
-            </div>
-
-
-            {/* =====================================================
-                ACCIÓN (crear ruta, perfil, etc — placeholder)
-            ===================================================== */}
-
-            <button
-                type="button"
-                onClick={() => navigate('/crear-ruta')}
-                className="
+                <button
+                    type="button"
+                    onClick={() => navigate('/')}
+                    className="
                     hidden
                     rounded-full
                     bg-emerald-600
@@ -128,10 +79,60 @@ function ExploreNavbar() {
                     sm:inline-flex
                     sm:items-center
                 "
-            >
-                + Crear ruta
-            </button>
+                >
+                    Inicio
+                </button>
 
+                <button
+                    type="button"
+                    onClick={() => navigate('/map')}
+                    className="
+                    hidden
+                    rounded-full
+                    bg-emerald-600
+                    px-4
+                    py-2
+                    text-sm
+                    font-semibold
+                    text-white
+                    shadow-sm
+                    transition
+                    hover:bg-emerald-500
+                    sm:inline-flex
+                    sm:items-center
+                "
+                >
+                    Mapa
+                </button>
+
+
+
+                {/* =====================================================
+                    ACCIÓN (crear ruta, perfil, etc — placeholder)
+                ===================================================== */}
+
+                <button
+                    type="button"
+                    onClick={() => navigate('/crear-ruta')}
+                    className="
+                hidden
+                rounded-full
+                bg-emerald-600
+                    px-4
+                    py-2
+                    text-sm
+                    font-semibold
+                    text-white
+                    shadow-sm
+                    transition
+                    hover:bg-emerald-500
+                    sm:inline-flex
+                    sm:items-center
+                    "
+                >
+                    + Crear ruta
+                </button>
+            </div>
         </nav>
     )
 }

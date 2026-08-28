@@ -25,11 +25,11 @@ function Home() {
 
             <div className="grid gap-6 lg:grid-cols-[minmax(280px,1fr)_minmax(0,2fr)_minmax(280px,1fr)]">
 
-              <ExploreRoutesSection />
+              <ExploreRoutesSection onOpenRoutes={() => navigate('/explore-routes')}/>
 
               <MapSection onOpenMap={() => navigate('/map')} />
 
-              <GroupsSection />
+              <GroupsSection/>
 
             </div>
 
