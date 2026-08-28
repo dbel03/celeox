@@ -133,6 +133,8 @@ export interface MountainRoute extends MountainRouteInput {
 
     recommendedMaterial?: string | null
 
+    votes: number
+
     createdAt: string
 
     updatedAt: string
